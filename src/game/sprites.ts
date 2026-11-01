@@ -281,7 +281,7 @@ export class SpriteManager {
         this.sprites[`enemy_boar_${walkingFrame}`] = frame(walkingFrame, 558);
       }
     };
-    image.src = '/assets/citizen-creature-reference.png';
+    image.src = `${import.meta.env.BASE_URL}assets/citizen-creature-reference.png`;
   }
 
   private loadNPCReferenceSprites() {
@@ -312,7 +312,7 @@ export class SpriteManager {
         this.sprites[`boss_king_${walkingFrame}`] = frame(walkingFrame, 468);
       }
     };
-    image.src = '/assets/npc-king-reference.png';
+    image.src = `${import.meta.env.BASE_URL}assets/npc-king-reference.png`;
   }
 
   private createNPCReferenceFrame(
@@ -450,7 +450,7 @@ export class SpriteManager {
         this.sprites[`player_attack_${direction}`] = this.createPlayerEquipmentSprite(frame, true, false);
       });
     };
-    baseImage.src = '/assets/player-views.png';
+    baseImage.src = `${import.meta.env.BASE_URL}assets/player-views.png`;
 
     const equippedImage = new Image();
     equippedImage.onerror = () => console.error('Unable to load public/assets/equipped-hero-reference.png');
@@ -482,7 +482,7 @@ export class SpriteManager {
         })
       );
     };
-    equippedImage.src = '/assets/equipped-hero-reference.png';
+    equippedImage.src = `${import.meta.env.BASE_URL}assets/equipped-hero-reference.png`;
   }
 
   private createPlayerViewFrame(
