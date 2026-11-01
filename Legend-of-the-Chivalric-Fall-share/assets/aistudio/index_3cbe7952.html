@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Legend of the Chivalric Fall - 15th Century GBC Adventure</title>
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      var el = document.getElementById('debug-error');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'debug-error';
+        el.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:99999;font-size:14px;padding:10px;font-family:sans-serif;';
+        document.body ? document.body.appendChild(el) : document.documentElement.appendChild(el);
+      }
+      el.innerHTML += '<p>' + msg + ' at ' + url + ':' + lineNo + '</p>';
+    };
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Utilities Bar -->
+  <header class="top-nav">
+    <button id="toggle-audio" class="nav-btn">🎵 Music: ON</button>
+    <button id="toggle-filter" class="nav-btn">📺 LCD Filter: ON</button>
+    <button id="toggle-size" class="nav-btn">🖥️ Mode: GBC Handheld</button>
+  </header>
+
+  <!-- Game Boy Color Console Handheld Shell -->
+  <main class="gbc-console" id="console-body">
+
+    <!-- Screen Bezel -->
+    <section class="gbc-bezel">
+      <div class="bezel-top">
+        <div class="power-indicator">
+          <div class="power-led"></div>
+          <span>POWER</span>
+        </div>
+      </div>
+
+      <!-- Canvas Viewport (160x144 Native Scaled) -->
+      <div class="screen-wrapper">
+        <canvas id="gameCanvas" width="160" height="144"></canvas>
+        <div class="scanlines-overlay" id="scanlines"></div>
+      </div>
+
+      <!-- Authentic GBC Logo -->
+      <div class="gbc-logo">
+        <span class="gbc-logo-text">GAME BOY</span>
+        <span class="gbc-logo-text color-text">
+          <span>C</span><span>O</span><span>L</span><span>O</span><span>R</span>
+        </span>
+      </div>
+    </section>
+
+    <!-- Lower Controls: D-Pad & Action Buttons (X, B, A) -->
+    <section class="gbc-controls-area">
+      
+      <!-- Virtual D-Pad (8-Way Movement) -->
+      <div class="dpad" id="dpad-container">
+        <button class="dpad-btn dpad-up" id="btn-up" aria-label="Up">▲</button>
+        <button class="dpad-btn dpad-left" id="btn-left" aria-label="Left">◀</button>
+        <div class="dpad-center"></div>
+        <button class="dpad-btn dpad-right" id="btn-right" aria-label="Right">▶</button>
+        <button class="dpad-btn dpad-down" id="btn-down" aria-label="Down">▼</button>
+      </div>
+
+      <!-- Action Buttons: Shield (X), Interact (B), Attack (A) -->
+      <div class="action-buttons">
+        <div class="action-btn-group">
+          <button class="round-btn round-btn-shield" id="btn-x" aria-label="Shield Guard">X</button>
+          <span class="btn-label">GUARD</span>
+        </div>
+        <div class="action-btn-group">
+          <button class="round-btn" id="btn-b" aria-label="Interact / Talk">B</button>
+          <span class="btn-label">B</span>
+        </div>
+        <div class="action-btn-group">
+          <button class="round-btn" id="btn-a" aria-label="Sword Attack">A</button>
+          <span class="btn-label">A</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Bottom Select & Start + Speaker Slots -->
+    <section class="gbc-bottom-row">
+      <div class="pill-buttons">
+        <div class="pill-group">
+          <button class="pill-btn" id="btn-select" aria-label="Select"></button>
+          <span class="pill-label">SELECT</span>
+        </div>
+        <div class="pill-group">
+          <button class="pill-btn" id="btn-start" aria-label="Start"></button>
+          <span class="pill-label">START</span>
+        </div>
+      </div>
+
+      <div class="speaker-grill">
+        <div class="speaker-slot"></div>
+        <div class="speaker-slot"></div>
+        <div class="speaker-slot"></div>
+        <div class="speaker-slot"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Player Guide & Controls Information (English) -->
+  <aside class="guide-card">
+    <div class="guide-title">⚔️ THE LEGEND OF CHIVALRIC FALL - ADVENTURE GUIDE ⚔️</div>
+    <div class="guide-grid">
+      <div>
+        <p><strong>Movement (8-Way Direction):</strong></p>
+        <p><span class="key-badge">W</span> <span class="key-badge">A</span> <span class="key-badge">S</span> <span class="key-badge">D</span> or <span class="key-badge">Arrow Keys</span></p>
+        <p style="font-size: 7.5px; color: #9bb;">* 8-way omnidirectional motion. The hero's sprite maintains the last cardinal orientation when moving diagonally.</p>
+        <p style="margin-top: 6px;"><strong>Shield Guard (Deflect Attacks):</strong></p>
+        <p><span class="key-badge">X</span> or <span class="key-badge">SHIFT</span> (Button X on Handheld)</p>
+        <p style="font-size: 7.5px; color: #9bb;">* Hold to raise the Knight's Heater Shield and deflect oncoming physical attacks with zero damage!</p>
+      </div>
+      <div>
+        <p><strong>Physical Combat & Interactions:</strong></p>
+        <p><span class="key-badge">SPACE</span> or <span class="key-badge">Z</span> : Sword Slash (Button A)</p>
+        <p><span class="key-badge">E</span> or <span class="key-badge">ENTER</span> : Talk / Interact (Button B)</p>
+        <p style="font-size: 7.5px; color: #9bb;">* Advance dialogues by pressing [SPACE], [E], or tapping anywhere on the screen.</p>
+        <p style="margin-top: 6px;"><strong>Sword Hone Upgrade:</strong></p>
+        <p style="font-size: 7.5px; color: #9bb;">* Complete Master Pierre's side-quest in Val-de-Loire to double your sword damage (1 → 2)!</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Game Scripts in Execution Order -->
+  <script src="js/audio.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/maps.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/dialogue.js"></script>
+  <script src="js/game.js"></script>
+
+  <!-- Shell Interactive Handlers -->
+  <script>
+    // Audio Toggle
+    const audioBtn = document.getElementById('toggle-audio');
+    audioBtn.addEventListener('click', () => {
+      audioManager.init();
+      const state = audioManager.toggleMusic();
+      audioBtn.textContent = state ? '🎵 Music: ON' : '🔇 Music: OFF';
+    });
+
+    // LCD Scanlines Filter Toggle
+    const filterBtn = document.getElementById('toggle-filter');
+    const scanlines = document.getElementById('scanlines');
+    let filterActive = true;
+    filterBtn.addEventListener('click', () => {
+      filterActive = !filterActive;
+      scanlines.classList.toggle('hidden', !filterActive);
+      filterBtn.textContent = filterActive ? '📺 LCD Filter: ON' : '📺 LCD Filter: OFF';
+    });
+
+    // Console Size Mode Toggle (Handheld vs Large Screen)
+    const sizeBtn = document.getElementById('toggle-size');
+    const consoleBody = document.getElementById('console-body');
+    let fullscreenMode = false;
+    sizeBtn.addEventListener('click', () => {
+      fullscreenMode = !fullscreenMode;
+      consoleBody.classList.toggle('fullscreen-mode', fullscreenMode);
+      sizeBtn.textContent = fullscreenMode ? '🖥️ Mode: Large Screen' : '🖥️ Mode: GBC Handheld';
+    });
+  </script>
+
+</body>
+</html>

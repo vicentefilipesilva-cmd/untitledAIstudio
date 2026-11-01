@@ -1,0 +1,18 @@
+LEGEND OF THE CHIVALRIC FALL
+
+PLAY ON THIS COMPUTER
+1. Extract the ZIP (right-click it and choose "Extract All...").
+2. Open the extracted folder.
+3. Double-click Play-Game.bat.
+4. Leave the black window open while you play. Your browser should open the game.
+5. When finished, close the game tab and press Ctrl+C in the black window.
+
+Do not double-click index.html. Browsers block some game files when opened directly from a ZIP or folder, which can show a blank page. Play-Game.bat starts a small local server using Windows PowerShell, which is already included with Windows.
+
+MAKE A PUBLIC LINK
+1. Go to https://app.netlify.com/drop in your browser and sign in or create an account.
+2. Extract the ZIP if you have not already.
+3. Drag the extracted game folder (the folder containing index.html and assets) onto the Netlify Drop page.
+4. Wait for the upload to finish, then copy the website address Netlify gives you and share it.
+
+Use WASD or the arrow keys to move. The game runs in a web browser.

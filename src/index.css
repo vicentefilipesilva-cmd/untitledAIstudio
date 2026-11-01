@@ -1,0 +1,214 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #020617;
+}
+
+.game-stage {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+}
+
+.game-screen-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: #080a10;
+}
+
+.game-screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #080a10;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.game-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+}
+
+.game-screen-controls {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0.12;
+  transition: opacity 160ms ease;
+}
+
+.game-screen-wrap:hover .game-screen-controls,
+.game-screen-controls:focus-within {
+  opacity: 1;
+}
+
+.game-screen-controls button {
+  border: 1px solid rgb(148 163 184 / 35%);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  color: #f8fafc;
+  background: rgb(2 6 23 / 82%);
+  font: 600 0.75rem/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.game-screen-controls button:hover {
+  background: rgb(30 41 59 / 95%);
+}
+
+.game-screen-controls kbd {
+  margin-left: 0.2rem;
+  color: #fcd34d;
+  font: inherit;
+}
+
+.game-controls-hint {
+  margin: 0.65rem 0 0;
+  color: #94a3b8;
+  text-align: center;
+  font: 0.75rem/1.5 system-ui, sans-serif;
+}
+
+.game-controls-hint span {
+  padding-inline: 0.3rem;
+  color: #475569;
+}
+
+.app-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #02050a;
+}
+
+.app-shell:fullscreen .app-header,
+.app-shell:fullscreen .game-guide,
+.app-shell:fullscreen .game-controls-hint {
+  display: none;
+}
+
+.app-shell:fullscreen .app-main {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.game-stage-fullscreen {
+  width: 100%;
+  height: 100%;
+}
+
+.game-stage-fullscreen .game-screen-wrap {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #101827 0%, #02050a 75%);
+}
+
+.game-stage-fullscreen .game-screen {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.game-screen-controls-fullscreen {
+  bottom: 1rem;
+  right: 1rem;
+  gap: 0.35rem;
+  opacity: 0.06;
+}
+
+.game-screen-controls-fullscreen button {
+  padding: 0.3rem 0.45rem;
+  font-size: 0.65rem;
+}
+
+@media (max-width: 1199px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding-inline: 0.75rem;
+  }
+
+  .app-header > div:first-child {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .app-header > div:first-child > span:nth-child(2) {
+    white-space: normal;
+  }
+
+  .app-header nav {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .app-header nav button {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 0.5rem;
+  }
+
+  .app-header nav button span:last-child {
+    text-align: center;
+    white-space: normal;
+  }
+
+  .app-header > div:last-child {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .app-main,
+  .game-stage {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-screen-controls {
+    bottom: 0.4rem;
+    right: 0.4rem;
+    gap: 0.3rem;
+  }
+
+  .game-screen-controls button {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.65rem;
+  }
+
+  .game-controls-hint {
+    padding-inline: 0.5rem;
+    font-size: 0.65rem;
+  }
+
+  .game-screen-controls-fullscreen {
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
+}

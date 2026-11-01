@@ -1,0 +1,1064 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { MapData, NPCData, TILE_SIZE, TileDef } from '../types/game';
+
+export const TILE_DEFS: Record<string, TileDef> = {
+  '.': { name: 'grass', sprite: 'tile_grass', solid: false },
+  'F': { name: 'flowers', sprite: 'tile_grass_flowers', solid: false },
+  'D': { name: 'dirt', sprite: 'tile_dirt', solid: false },
+  'C': { name: 'cobble', sprite: 'tile_cobble', solid: false },
+  // Rivers / canals — always impassable (bridge tiles stay C/D and remain walkable)
+  'W': { name: 'water', sprite: 'tile_water', solid: true },
+  'T': { name: 'tree_trunk', sprite: 'tile_tree_trunk', topSprite: 'tile_tree_top', solid: true },
+  'H': { name: 'fence', sprite: 'tile_fence', solid: true },
+  'R': { name: 'slate_roof', sprite: 'tile_roof_slate', solid: true },
+  'L': { name: 'timber_wall', sprite: 'tile_wall_timber', solid: true },
+  'I': { name: 'timber_window', sprite: 'tile_wall_window', solid: true },
+  'E': { name: 'gothic_door', sprite: 'tile_door_gothic', solid: false },
+  'S': { name: 'sign', sprite: 'tile_sign', solid: true, interactable: 'sign' },
+  'M': { name: 'gothic_stone_wall', sprite: 'tile_gothic_stone', solid: true },
+  'N': { name: 'royal_banner', sprite: 'tile_banner', solid: true },
+  'P': { name: 'stained_glass', sprite: 'tile_stained_glass', solid: true },
+  'K': { name: 'royal_throne', sprite: 'tile_royal_throne', solid: true },
+  'V': { name: 'red_carpet', sprite: 'tile_carpet', solid: false },
+  'Y': { name: 'blacksmith_anvil', sprite: 'tile_anvil', solid: true, interactable: 'anvil' },
+  'A': { name: 'ancient_altar', sprite: 'item_sword_shrine', solid: true, interactable: 'altar' },
+  'G': { name: 'vineyard', sprite: 'tile_vineyard', solid: true },
+  'X': { name: 'village fountain', sprite: 'tile_fountain', solid: true },
+  'Z': { name: 'mossy standing stone', sprite: 'tile_standing_stone', solid: true },
+  '?': { name: 'Aiguemorte lighthouse', sprite: 'tile_lighthouse', solid: true },
+  'J': { name: 'Orléans market stall', sprite: 'tile_market_stall', solid: true },
+  '!': { name: 'Tours bell tower', sprite: 'tile_bell_tower', solid: true },
+  'O': { name: 'oak_floor', sprite: 'tile_oak_floor', solid: false },
+  'B': { name: 'bed', sprite: 'tile_bed', solid: true },
+  'U': { name: 'bookshelf', sprite: 'tile_bookshelf', solid: true },
+  'Q': { name: 'table', sprite: 'tile_house_table', solid: true }
+};
+
+const createHouseInterior = (
+  id: string,
+  name: string,
+  returnMap: string,
+  outsideDoorX: number,
+  outsideDoorY: number,
+  residents: NPCData[],
+  style = 0
+): MapData => {
+  const layout: string[][] = Array.from({ length: 10 }, (_, y) =>
+    Array.from({ length: 12 }, (_, x) => x === 0 || x === 11 || y === 0 || y === 9 ? 'M' : 'O')
+  );
+  const furniture = [
+    [[2, 2, 'U'], [8, 2, 'U'], [2, 4, 'B'], [6, 4, 'Q']],
+    [[2, 2, 'U'], [3, 2, 'U'], [8, 3, 'U'], [8, 4, 'B'], [5, 4, 'Q']],
+    [[8, 2, 'U'], [8, 3, 'U'], [2, 5, 'B'], [3, 4, 'Q'], [8, 5, 'Q']]
+  ][style % 3] as Array<[number, number, string]>;
+  for (const [x, y, tile] of furniture) layout[y][x] = tile;
+  layout[8][5] = 'E';
+
+  if (style === 1) {
+    for (let x = 2; x <= 9; x++) layout[6][x] = 'V';
+  } else if (style === 2) {
+    for (let x = 2; x <= 9; x++) layout[6][x] = 'C';
+  }
+
+  return {
+    id,
+    name,
+    region: 'A quiet home',
+    music: 'village',
+    width: 12,
+    height: 10,
+    layout: layout.map(row => row.join('')),
+    exits: [],
+    doors: [{
+      x: 5 * 16,
+      y: 8 * 16,
+      targetMap: returnMap,
+      targetX: outsideDoorX * 16,
+      targetY: outsideDoorY * 16 - 4,
+      targetFacing: 0
+    }],
+    npcs: residents,
+    enemies: []
+  };
+};
+
+export const WORLD_MAPS: Record<string, MapData> = {
+  village: {
+    id: 'village',
+    name: "Le Hameau d'Oakhaven",
+    region: 'Act I: The Spark of Ambition',
+    music: 'village',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTDDTTTTTTTTT",
+      "T........DD........T",
+      "T.RRRR...DD...RRRR.T",
+      "T.LLIE...DD...ILIE.T",
+      "T.HH.H...DD...HHHH.T",
+      "T........DD........T",
+      "T..C..C..DD..C..C..T",
+      "T..C..C..DD..C..C..T",
+      "T..CCCC..DD..FFFF..T",
+      "T........DD..FFFF..T",
+      "T...S....DD........T",
+      "T.HHHH...DD...HHHH.T",
+      "T........DD........T",
+      "TTTTTTTTTTTTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'forest',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1
+      }
+    ],
+    doors: [
+      { x: 5 * 16, y: 3 * 16, targetMap: 'oakhaven_cottage', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 },
+      { x: 17 * 16, y: 2 * 16, targetMap: 'oakhaven_inn', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
+    ],
+    npcs: [
+      { id: 'oldman', name: 'Le Doyen Tobias', sprite: 'npc_oldman', x: 6 * 16, y: 4 * 16, facing: 0 },
+      { id: 'village_guard', name: "Le Garde d'Oakhaven", sprite: 'npc_guard', x: 11 * 16, y: 2 * 16, facing: 2 }
+    ],
+    enemies: [],
+    signText: "Oakhaven Village\n▲ North: Le Bois des Murmures (Forest)\nFollow the dirt road north to reach the Capital."
+  },
+
+  forest: {
+    id: 'forest',
+    name: 'Le Bois des Murmures',
+    region: 'Act I: The Spark of Ambition',
+    music: 'forest',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTTTTTTTTTTTT",
+      "T........TT........T",
+      "T.A......TT........T",
+      "T.DDDDDDDDD........T",
+      "T........DD........T",
+      "T........DDDDDDDDDDD",
+      "T........DDDDDDDDDDD",
+      "T........DD........T",
+      "T.TTTT...DD...TTTT.T",
+      "T.TTTT...DD...TTTT.T",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DD........T",
+      "TTTTTTTTTDDTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'village',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 19 * 16 + 2, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'aiguemorte',
+        targetX: 1 * 16 + 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 3,
+        condition: 'canEnterTown',
+        lockMessage: "The eastern trail to Aiguemorte is barred! Return the straw hat to Le Doyen Tobias in Oakhaven first."
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'boar', x: 5 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 7 * 16 },
+      { type: 'wolf', x: 14 * 16, y: 9 * 16, patrolAxis: 'y', patrolMin: 8 * 16, patrolMax: 11 * 16 }
+    ],
+    altar: { x: 2 * 16, y: 2 * 16, active: true },
+    signText: "Le Bois des Murmures: Sacred Stone Altar in the Northwest corner (▲).\n▶ East: Road leads toward the walled city of Aiguemorte."
+  },
+
+  aiguemorte: {
+    id: 'aiguemorte',
+    name: 'Aiguemorte',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'town',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M........DD........M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "M........DD........M",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M...S....DD........M",
+      "M........DD........M",
+      "MMMMMMMMMMMMMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 0, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'forest',
+        targetX: 18 * 16 - 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 2
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'route1',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1,
+        condition: 'canEnterRoute1',
+        lockMessage: "Garrison guards have barricaded the northern exit! Help Madame Renée recover the orphans' flour first."
+      }
+    ],
+    doors: [
+      { x: 5 * 16, y: 2 * 16, targetMap: 'aiguemorte_bakery', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 },
+      { x: 17 * 16, y: 9 * 16, targetMap: 'aiguemorte_home', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
+    ],
+    npcs: [
+      { id: 'baker_woman', name: 'Madame Renée', sprite: 'npc_baker', x: 4 * 16, y: 8 * 16, facing: 3 },
+      { id: 'town_guard', name: 'Le Garde de la Garnison', sprite: 'npc_guard', x: 11 * 16, y: 2 * 16, facing: 0 }
+    ],
+    enemies: [
+      { type: 'bandit', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, isQuestTarget: 'flour_bandit', neutralUntilProvoked: true }
+    ],
+    signText: "Aiguemorte: 'Heavy crown taxes empty the granaries, while orphans starve.'\n▲ North: Route 1 to Val-de-Loire | ◀ West: Le Bois des Murmures."
+  },
+
+  route1: {
+    id: 'route1',
+    name: 'Route 1 (Le Chemin Fluvial)',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'road',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTTTTTTTTTTTT",
+      "T..................T",
+      "T...TTTT....TTTT...T",
+      "T...TTTT....TTTT...T",
+      "T........DD........T",
+      "DDDDDDDDDDD........T",
+      "DDDDDDDDDDD........T",
+      "T........DD........T",
+      "TWWWWWWWCDDCWWWWWWWT",
+      "TWWWWWWWCDDCWWWWWWWT",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DD........T",
+      "TTTTTTTTTDDTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'aiguemorte',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 0, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'val_de_loire',
+        targetX: 18 * 16 - 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 2
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'wolf', x: 5 * 16, y: 2 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 7 * 16 },
+      { type: 'bandit', x: 14 * 16, y: 3 * 16, patrolAxis: 'y', patrolMin: 2 * 16, patrolMax: 5 * 16, isQuestTarget: 'iron_ore_bandit' }
+    ],
+    signText: "Route 1: Stone bridge over the Loire River.\n◀ West: Val-de-Loire | ▼ South: Aiguemorte."
+  },
+
+  val_de_loire: {
+    id: 'val_de_loire',
+    name: 'Val-de-Loire',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'town',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M........DD........M",
+      "M.DDDDDDDDDDDDDDDD..",
+      "M.DDDDDDDYYDDDDDDD..",
+      "M........DD........M",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M...S....DD........M",
+      "M........DD........M",
+      "MMMMMMMMMMMMMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 19 * 16 + 2, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'route1',
+        targetX: 1 * 16 + 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 3
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'route2',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1,
+        condition: 'canEnterHighroad',
+        lockMessage: "Maître Pierre warns: The royal highroad is perilous without a shield and honed blade!"
+      }
+    ],
+    npcs: [
+      { id: 'blacksmith', name: 'Maître Pierre', sprite: 'npc_blacksmith', x: 9 * 16, y: 5 * 16, facing: 3 },
+      { id: 'merchant', name: 'Aldric le Marchand', sprite: 'npc_merchant', x: 4 * 16, y: 8 * 16, facing: 0 }
+    ],
+    enemies: [],
+    signText: "Val-de-Loire Forge: Maître Pierre's Anvil. 'True steel remembers honor.'\n▲ North: Route 2 to Orléans | ▶ East: Route 1."
+  },
+
+  route2: {
+    id: 'route2',
+    name: 'Route 2 (Le Pont Royal)',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'road',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTTTTTTTTTTTT",
+      "T..................T",
+      "T...TTTT....TTTT...T",
+      "T...TTTT....TTTT...T",
+      "T........DD........T",
+      "T........DDDDDDDDDDD",
+      "T........DDDDDDDDDDD",
+      "T........DD........T",
+      "TWWWWWWWCDDCWWWWWWWT",
+      "TWWWWWWWCDDCWWWWWWWT",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DD........T",
+      "TTTTTTTTTDDTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'val_de_loire',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 19 * 16 + 2, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'orleans',
+        targetX: 1 * 16 + 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 3
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'bandit', x: 4 * 16, y: 3 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 6 * 16 },
+      { type: 'wolf', x: 15 * 16, y: 3 * 16, patrolAxis: 'y', patrolMin: 2 * 16, patrolMax: 5 * 16 }
+    ],
+    signText: "Route 2: Grand stone bridge crossing toward Orléans.\n▶ East: Orléans | ▼ South: Val-de-Loire."
+  },
+
+  orleans: {
+    id: 'orleans',
+    name: 'Orléans',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'town',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M........DD........M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "M........DD........M",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M...S....DD........M",
+      "M........DD........M",
+      "MMMMMMMMMMMMMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 0, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'route2',
+        targetX: 18 * 16 - 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 2
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'route4',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1
+      }
+    ],
+    npcs: [
+      { id: 'orleans_citizen', name: "Le Citoyen d'Orléans", sprite: 'npc_civilian', x: 4 * 16, y: 8 * 16, facing: 3 }
+    ],
+    enemies: [
+      { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
+    ],
+    signText: "Orléans: Ancient bastions and trade markets.\n▲ North: Route 4 to Tours | ◀ West: Route 2."
+  },
+
+  route4: {
+    id: 'route4',
+    name: 'Route 4 (Le Col des Collines)',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'road',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTTTTTTTTTTTT",
+      "T..................T",
+      "T...TTTT....TTTT...T",
+      "T...TTTT....TTTT...T",
+      "T........DD........T",
+      "DDDDDDDDDDD........T",
+      "DDDDDDDDDDD........T",
+      "T........DD........T",
+      "T..FFFF..DD..FFFF..T",
+      "T..FFFF..DD..FFFF..T",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DD........T",
+      "TTTTTTTTTDDTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'orleans',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 0, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'tours',
+        targetX: 18 * 16 - 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 2
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'wolf', x: 5 * 16, y: 2 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 7 * 16 },
+      { type: 'corrupt_knight', x: 14 * 16, y: 8 * 16, patrolAxis: 'y', patrolMin: 7 * 16, patrolMax: 10 * 16 }
+    ],
+    signText: "Route 4: Mountain trail through the hills.\n◀ West: Tours | ▼ South: Orléans."
+  },
+
+  tours: {
+    id: 'tours',
+    name: 'Tours',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'town',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.PPM..M.DD..MPPM..M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M........DD........M",
+      "M.DDDDDDDDDDDDDDDD..",
+      "M.DDDDDDDDDDDDDDDD..",
+      "M........DD........M",
+      "M.RRRR...DD...RRRR.M",
+      "M.LLIE...DD...ILIE.M",
+      "M.HH.H...DD...HHHH.M",
+      "M...S....DD........M",
+      "M........DD........M",
+      "MMMMMMMMMMMMMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 19 * 16 + 2, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'route4',
+        targetX: 1 * 16 + 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 3
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'route5',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1
+      }
+    ],
+    npcs: [
+      { id: 'tours_scholar', name: 'Le Moine de Tours', sprite: 'npc_civilian', x: 5 * 16, y: 8 * 16, facing: 3 }
+    ],
+    enemies: [
+      { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
+    ],
+    signText: "Tours: Gothic spires reflecting upon serene waters.\n▲ North: Route 5 to Dijon vineyards | ▶ East: Route 4."
+  },
+
+  route5: {
+    id: 'route5',
+    name: 'Route 5 (La Sente du Vignoble)',
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'road',
+    width: 20,
+    height: 14,
+    layout: [
+      "TTTTTTTTTTTTTTTTTTTT",
+      "T.GGGG...DD...GGGG.T",
+      "T.GGGG...DD...GGGG.T",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DDDDDDDDDDD",
+      "T........DDDDDDDDDDD",
+      "T........DD........T",
+      "T.GGGG...DD...GGGG.T",
+      "T.GGGG...DD...GGGG.T",
+      "T........DD........T",
+      "T........DD........T",
+      "T........DD........T",
+      "TTTTTTTTTDDTTTTTTTTT"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'tours',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 19 * 16 + 2, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'dijon',
+        targetX: 1 * 16 + 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 3
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'bandit', x: 5 * 16, y: 3 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 7 * 16 },
+      { type: 'wolf', x: 14 * 16, y: 9 * 16, patrolAxis: 'y', patrolMin: 8 * 16, patrolMax: 11 * 16 }
+    ],
+    signText: "Route 5: Sunlit vineyard hills of the French countryside.\n▶ East: Dijon | ▼ South: Tours."
+  },
+
+  dijon: {
+    id: 'dijon',
+    name: "Dijon & La Forêt d'Ombre",
+    region: 'Act II: The Trial of Towns and Woods',
+    music: 'town',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.GGGG...DD...GGGG.M",
+      "M.GGGG...DD...GGGG.M",
+      "M........DD........M",
+      "M.RRRR...DD...RRRR.M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "..DDDDDDDDDDDDDDDD.M",
+      "M........DD........M",
+      "M..CCCC..DD..CCCC..M",
+      "M..CCCC..DD..CCCC..M",
+      "M.HH.H...DD...HHHH.M",
+      "M...S....DD........M",
+      "M........DD........M",
+      "MMMMMMMMMMMMMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 0, y: 5 * 16 - 4, w: 14, h: 2 * 16 + 8 },
+        targetMap: 'route5',
+        targetX: 18 * 16 - 4,
+        targetY: 5 * 16 + 4,
+        targetFacing: 2
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'royalRoad',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1,
+        condition: 'hasWineIntel',
+        lockMessage: "The Imperial gate is locked! Intercept the noble convoy in the dark woods to recover the royal orders."
+      }
+    ],
+    npcs: [
+      { id: 'vintner', name: 'Marc le Vigneron', sprite: 'npc_vintner', x: 4 * 16, y: 8 * 16, facing: 3 }
+    ],
+    enemies: [
+      { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, isQuestTarget: 'royal_convoy_lord', neutralUntilProvoked: true }
+    ],
+    signText: "Dijon & La Forêt d'Ombre: 'Where sweet vintage meets royal greed.'\n▲ North: Le Chemin Royal | ◀ West: Route 5."
+  },
+
+  royalRoad: {
+    id: 'royalRoad',
+    name: 'Le Chemin Royal',
+    region: 'Act III: The Shadow Over the Crown',
+    music: 'road',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMM..MMMMMMMMM",
+      "M.N....N.DD.N....N.M",
+      "M........DD........M",
+      "M..CCCC..DD..CCCC..M",
+      "M..CCCC..DD..CCCC..M",
+      "M........DD........M",
+      "M.N....N.DD.N....N.M",
+      "M........DD........M",
+      "M..CCCC..DD..CCCC..M",
+      "M..CCCC..DD..CCCC..M",
+      "M........DD........M",
+      "M.N....N.DD.N....N.M",
+      "M........DD........M",
+      "MMMMMMMMM..MMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'dijon',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      },
+      {
+        trigger: { x: 9 * 16 - 4, y: 0, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'capital',
+        targetX: 9 * 16 + 4,
+        targetY: 12 * 16,
+        targetFacing: 1
+      }
+    ],
+    npcs: [],
+    enemies: [
+      { type: 'corrupt_knight', x: 5 * 16, y: 5 * 16, patrolAxis: 'x', patrolMin: 3 * 16, patrolMax: 7 * 16 },
+      { type: 'corrupt_knight', x: 15 * 16, y: 7 * 16, patrolAxis: 'x', patrolMin: 13 * 16, patrolMax: 17 * 16 }
+    ],
+    signText: "Le Chemin Royal: Broad paved highway leading directly to Le Château Noir.\n▲ North: Le Château Noir | ▼ South: Dijon."
+  },
+
+  capital: {
+    id: 'capital',
+    name: 'Le Château Noir (Throne Room)',
+    region: 'Act III & Climax: The Final Duel',
+    music: 'boss',
+    width: 20,
+    height: 14,
+    layout: [
+      "MMMMMMMMMMMMMMMMMMMM",
+      "MPPMNNMMK..KMMNNMPPM",
+      "MMMMMMMMKVVKMMMMMMMM",
+      "CCCCCCCCCVVCCCCCCCCC",
+      "C........VV........C",
+      "C........VV........C",
+      "C........VV........C",
+      "C........VV........C",
+      "C........VV........C",
+      "C........VV........C",
+      "C........VV........C",
+      "CCCCCCCCCVVCCCCCCCCC",
+      "CCCCCCCCCVVCCCCCCCCC",
+      "MMMMMMMMM..MMMMMMMMM"
+    ],
+    exits: [
+      {
+        trigger: { x: 9 * 16 - 4, y: 13 * 16 + 2, w: 2 * 16 + 8, h: 14 },
+        targetMap: 'royalRoad',
+        targetX: 9 * 16 + 4,
+        targetY: 1 * 16 + 4,
+        targetFacing: 0
+      }
+    ],
+    npcs: [],
+    enemies: [],
+    signText: "Le Château Noir Throne Room: The seat of King Raymond IV's tyrannical reign."
+  },
+
+  oakhaven_cottage: createHouseInterior('oakhaven_cottage', "Tobias's Cottage", 'village', 5, 3, [
+    { id: 'cottage_resident', name: 'Élise the Weaver', sprite: 'npc_baker', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'cottage_child', name: 'Little Étienne', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
+  ]),
+  oakhaven_inn: createHouseInterior('oakhaven_inn', "The Oakhaven Hearth", 'village', 17, 5, [
+    { id: 'innkeeper', name: 'Perrine the Innkeeper', sprite: 'npc_vintner', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'traveler', name: 'A Traveling Peddler', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
+  ]),
+  aiguemorte_bakery: createHouseInterior('aiguemorte_bakery', "Madame Renée's Bakery", 'aiguemorte', 5, 2, [
+    { id: 'bakery_helper', name: 'Luc the Baker', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'bakery_child', name: 'A Hungry Orphan', sprite: 'npc_baker', x: 7 * 16, y: 4 * 16, facing: 2 }
+  ]),
+  aiguemorte_home: createHouseInterior('aiguemorte_home', "Aiguemorte Townhouse", 'aiguemorte', 17, 9, [
+    { id: 'town_resident', name: 'Jeanne the Seamstress', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'town_child', name: 'Young Perrin', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
+  ])
+};
+
+const EXPANSION_MARGIN = 6;
+export const WORLD_MAP_OFFSET = EXPANSION_MARGIN * 16;
+type MapEdge = 'north' | 'south' | 'west' | 'east';
+
+const SETTLEMENT_EXPANSIONS = [
+  {
+    mapId: 'village',
+    border: 'T',
+    landmark: 'X',
+    citizens: [
+      ['Bastien the Shepherd', 'npc_vintner'],
+      ['Margot the Gardener', 'npc_baker'],
+      ['Perrin the Cooper', 'npc_merchant']
+    ],
+    homes: [
+      ['oakhaven_miller', "The Miller's Cottage", 'Théo the Miller', 'npc_merchant', 'Lucie the Baker', 'npc_baker'],
+      ['oakhaven_herbalist', 'Alix’s Herb Garden', 'Alix the Herbalist', 'npc_baker', 'Noël the Gatherer', 'npc_civilian'],
+      ['oakhaven_woodcutter', 'The Woodcutter’s Lodge', 'Armand the Woodcutter', 'npc_civilian', 'Jeannette the Spinner', 'npc_vintner']
+    ]
+  },
+  {
+    mapId: 'aiguemorte',
+    border: 'M',
+    landmark: '?',
+    citizens: [
+      ['Étienne the Ferryman', 'npc_merchant'],
+      ['Sabine the Potter', 'npc_baker'],
+      ['Hugo the Lamplighter', 'npc_civilian']
+    ],
+    homes: [
+      ['aiguemorte_ferryman', 'The Ferryman’s House', 'Étienne the Ferryman', 'npc_merchant', 'Agnès the Net-Mender', 'npc_baker'],
+      ['aiguemorte_potter', 'Sabine’s Pottery', 'Sabine the Potter', 'npc_baker', 'Rémi the Apprentice', 'npc_merchant'],
+      ['aiguemorte_lamplighter', 'The Lamplighter’s Home', 'Hugo the Lamplighter', 'npc_civilian', 'Jeanne the Seamstress', 'npc_vintner']
+    ]
+  },
+  {
+    mapId: 'val_de_loire',
+    border: 'M',
+    landmark: 'Y',
+    citizens: [
+      ['Clémence the Smith', 'npc_civilian'],
+      ['Gaspard the Boatman', 'npc_merchant'],
+      ['Adèle the Scribe', 'npc_civilian']
+    ],
+    homes: [
+      ['loire_smith', 'The Smith’s Home', 'Clémence the Smith', 'npc_civilian', 'Benoît the Apprentice', 'npc_merchant'],
+      ['loire_boatman', 'The Boatman’s House', 'Gaspard the Boatman', 'npc_merchant', 'Alix the Weaver', 'npc_baker'],
+      ['loire_scribe', 'The Scribe’s Rooms', 'Adèle the Scribe', 'npc_civilian', 'Paule the Candle-Maker', 'npc_vintner']
+    ]
+  },
+  {
+    mapId: 'orleans',
+    border: 'M',
+    landmark: 'J',
+    citizens: [
+      ['Lucette the Flower Seller', 'npc_baker'],
+      ['Martin the Canal Pilot', 'npc_merchant'],
+      ['Héloïse the Bell Ringer', 'npc_civilian']
+    ],
+    homes: [
+      ['orleans_flower', 'The Flower Seller’s Home', 'Lucette the Flower Seller', 'npc_baker', 'Perrin the Gardener', 'npc_merchant'],
+      ['orleans_scriptorium', 'The Scriptorium', 'Adèle the Copyist', 'npc_civilian', 'Jules the Errand Boy', 'npc_merchant'],
+      ['orleans_canal', 'The Canal Pilot’s House', 'Martin the Canal Pilot', 'npc_merchant', 'Émilie the Spinner', 'npc_vintner']
+    ]
+  },
+  {
+    mapId: 'tours',
+    border: 'M',
+    landmark: '!',
+    citizens: [
+      ['Père Mathieu the Bell Keeper', 'npc_civilian'],
+      ['Isabeau the Baker', 'npc_baker'],
+      ['Robin the River Trader', 'npc_merchant']
+    ],
+    homes: [
+      ['tours_bellkeeper', 'The Bell Keeper’s House', 'Père Mathieu', 'npc_civilian', 'Colette the Candlemaker', 'npc_baker'],
+      ['tours_baker', 'Isabeau’s Bakery', 'Isabeau the Baker', 'npc_baker', 'Nicolas the Apprentice', 'npc_merchant'],
+      ['tours_trader', 'The River Trader’s Home', 'Robin the Trader', 'npc_merchant', 'Aline the Weaver', 'npc_vintner']
+    ]
+  },
+  {
+    mapId: 'dijon',
+    border: 'M',
+    landmark: 'G',
+    citizens: [
+      ['Marguerite the Vintner', 'npc_vintner'],
+      ['Colin the Cooper', 'npc_merchant'],
+      ['Berthe the Preserver', 'npc_baker']
+    ],
+    homes: [
+      ['dijon_vintner', 'The Vintner’s House', 'Marguerite the Vintner', 'npc_vintner', 'Léon the Cellarman', 'npc_merchant'],
+      ['dijon_cooper', 'Colin’s Cooperage', 'Colin the Cooper', 'npc_merchant', 'Jeanne the Preserver', 'npc_baker'],
+      ['dijon_cellar', 'The Old Cellar House', 'Berthe the Preserver', 'npc_baker', 'Amaury the Grape Picker', 'npc_civilian']
+    ]
+  }
+] as const;
+
+const EXPANDED_MAP_IDS = new Set(['village', 'forest', ...SETTLEMENT_EXPANSIONS.map(settlement => settlement.mapId)]);
+export const isExpandedWorldMap = (mapId: string) => EXPANDED_MAP_IDS.has(mapId);
+
+const getExitEdge = (exit: MapData['exits'][number], map: MapData): MapEdge | null => {
+  const { x, y, w, h } = exit.trigger;
+  if (x <= 0) return 'west';
+  if (x + w >= map.width * TILE_SIZE) return 'east';
+  if (y <= 0) return 'north';
+  if (y + h >= map.height * TILE_SIZE) return 'south';
+  return null;
+};
+
+const expandWorldMap = (map: MapData, border: string) => {
+  const oldWidth = map.width;
+  const oldHeight = map.height;
+  const newWidth = oldWidth + EXPANSION_MARGIN * 2;
+  const newHeight = oldHeight + EXPANSION_MARGIN * 2;
+  const grid = Array.from({ length: newHeight }, () => Array(newWidth).fill('.'));
+
+  for (let x = 0; x < newWidth; x++) {
+    grid[0][x] = border;
+    grid[newHeight - 1][x] = border;
+  }
+  for (let y = 0; y < newHeight; y++) {
+    grid[y][0] = border;
+    grid[y][newWidth - 1] = border;
+  }
+
+  map.layout.forEach((row, y) => {
+    for (let x = 0; x < oldWidth; x++) {
+      grid[y + EXPANSION_MARGIN][x + EXPANSION_MARGIN] = row[x] || '.';
+    }
+  });
+
+  const openOldTile = (x: number, y: number) => {
+    grid[y + EXPANSION_MARGIN][x + EXPANSION_MARGIN] = 'D';
+  };
+  if (map.id === 'forest') {
+    [[9, 0], [3, 13], [14, 13], [19, 5], [19, 6], [0, 7]].forEach(([x, y]) => openOldTile(x, y));
+  } else {
+    [[3, 13], [16, 13], [19, 6], [19, 10], [0, 7]].forEach(([x, y]) => openOldTile(x, y));
+  }
+
+  const offset = EXPANSION_MARGIN * TILE_SIZE;
+  map.exits.forEach(exit => {
+    const trigger = exit.trigger;
+    const edge = getExitEdge(exit, { ...map, width: oldWidth, height: oldHeight });
+    const startX = Math.floor(trigger.x / TILE_SIZE) + EXPANSION_MARGIN;
+    const endX = Math.floor((trigger.x + trigger.w - 1) / TILE_SIZE) + EXPANSION_MARGIN;
+    const startY = Math.floor(trigger.y / TILE_SIZE) + EXPANSION_MARGIN;
+    const endY = Math.floor((trigger.y + trigger.h - 1) / TILE_SIZE) + EXPANSION_MARGIN;
+
+    if (edge === 'north' || edge === 'south') {
+      for (let x = startX; x <= endX; x++) {
+        const firstRow = edge === 'north' ? 0 : startY;
+        const lastRow = edge === 'north' ? endY : newHeight - 1;
+        for (let y = firstRow; y <= lastRow; y++) grid[y][x] = 'D';
+      }
+    } else if (edge === 'west' || edge === 'east') {
+      for (let y = startY; y <= endY; y++) {
+        const firstColumn = edge === 'west' ? 0 : startX;
+        const lastColumn = edge === 'west' ? endX : newWidth - 1;
+        for (let x = firstColumn; x <= lastColumn; x++) grid[y][x] = 'D';
+      }
+    }
+
+    trigger.x = edge === 'west'
+      ? 0
+      : edge === 'east'
+        ? newWidth * TILE_SIZE - trigger.w
+        : trigger.x + offset;
+    trigger.y = edge === 'north'
+      ? 0
+      : edge === 'south'
+        ? newHeight * TILE_SIZE - trigger.h
+        : trigger.y + offset;
+  });
+  (map.doors || []).forEach(door => {
+    door.x += offset;
+    door.y += offset;
+  });
+  map.npcs.forEach(npc => {
+    npc.x += offset;
+    npc.y += offset;
+  });
+  map.enemies.forEach(enemy => {
+    enemy.x += offset;
+    if (enemy.y !== undefined) enemy.y += offset;
+    if (enemy.patrolMin !== undefined) enemy.patrolMin += offset;
+    if (enemy.patrolMax !== undefined) enemy.patrolMax += offset;
+  });
+  if (map.altar) {
+    map.altar.x += offset;
+    map.altar.y += offset;
+  }
+
+  map.width = newWidth;
+  map.height = newHeight;
+  map.layout = grid.map(row => row.join(''));
+};
+
+for (const mapId of EXPANDED_MAP_IDS) {
+  const map = WORLD_MAPS[mapId];
+  if (!map) throw new Error(`Missing world map for expansion: ${mapId}`);
+  const settlement = SETTLEMENT_EXPANSIONS.find(entry => entry.mapId === mapId);
+  expandWorldMap(map, settlement?.border || 'T');
+}
+
+for (const map of Object.values(WORLD_MAPS)) {
+  for (const exit of map.exits) {
+    if (EXPANDED_MAP_IDS.has(exit.targetMap)) {
+      const targetMap = WORLD_MAPS[exit.targetMap];
+      const returnExit = targetMap.exits.find(candidate => candidate.targetMap === map.id);
+      const edge = returnExit && getExitEdge(returnExit, targetMap);
+      if (!edge) {
+        exit.targetX += WORLD_MAP_OFFSET;
+        exit.targetY += WORLD_MAP_OFFSET;
+        continue;
+      }
+
+      const trigger = returnExit.trigger;
+      if (edge === 'west' || edge === 'east') {
+        exit.targetX = edge === 'west'
+          ? TILE_SIZE + 2
+          : targetMap.width * TILE_SIZE - TILE_SIZE - 12;
+        exit.targetY = trigger.y + trigger.h / 2 - 5;
+        exit.targetFacing = edge === 'west' ? 3 : 2;
+      } else {
+        exit.targetX = trigger.x + trigger.w / 2 - 6;
+        exit.targetY = edge === 'north'
+          ? TILE_SIZE + 2
+          : targetMap.height * TILE_SIZE - TILE_SIZE - 10;
+        exit.targetFacing = edge === 'north' ? 0 : 1;
+      }
+    }
+  }
+  for (const door of map.doors || []) {
+    if (EXPANDED_MAP_IDS.has(door.targetMap)) {
+      door.targetX += EXPANSION_MARGIN * 16;
+      door.targetY += EXPANSION_MARGIN * 16;
+    }
+  }
+}
+
+const addDistrictBuilding = (map: MapData, startX: number, roofY: number) => {
+  const rows = [
+    ['R', 'R', 'R', 'R'],
+    ['L', 'L', 'I', 'E'],
+    ['H', 'H', '.', '.']
+  ];
+  rows.forEach((row, rowOffset) => {
+    row.forEach((tile, columnOffset) => {
+      const current = map.layout[roofY + rowOffset].split('');
+      current[startX + columnOffset] = tile;
+      map.layout[roofY + rowOffset] = current.join('');
+    });
+  });
+};
+
+for (const settlement of SETTLEMENT_EXPANSIONS) {
+  const map = WORLD_MAPS[settlement.mapId];
+  const houseY = map.height - 5;
+  const houseXs = [3, 13, 23];
+  const roadY = houseY - 1;
+  const road = map.layout[roadY].split('');
+  for (let x = 3; x < map.width - 3; x++) road[x] = 'D';
+  map.layout[roadY] = road.join('');
+
+  settlement.homes.forEach((home, index) => {
+    const [houseId, houseName, firstName, firstSprite, secondName, secondSprite] = home;
+    const houseX = houseXs[index];
+    addDistrictBuilding(map, houseX, houseY);
+    map.doors = map.doors || [];
+    map.doors.push({
+      x: (houseX + 3) * 16,
+      y: (houseY + 1) * 16,
+      targetMap: houseId,
+      targetX: 5 * 16,
+      targetY: 7 * 16,
+      targetFacing: 0
+    });
+    map.npcs.push({
+      id: `${houseId}_neighbor`,
+      name: firstName,
+      sprite: firstSprite,
+      x: (houseX + 1) * 16,
+      y: roadY * 16,
+      facing: 0
+    });
+
+    WORLD_MAPS[houseId] = createHouseInterior(houseId, houseName, map.id, houseX + 2, houseY + 2, [
+      { id: `${houseId}_resident`, name: firstName, sprite: firstSprite, x: 4 * 16, y: 4 * 16, facing: 3 },
+      { id: `${houseId}_family`, name: secondName, sprite: secondSprite, x: 7 * 16, y: 4 * 16, facing: 2 }
+    ], index);
+  });
+
+  settlement.citizens.forEach(([name, sprite], index) => {
+    map.npcs.push({
+      id: `${settlement.mapId}_citizen_${index + 1}`,
+      name,
+      sprite,
+      x: (8 + index * 6) * 16,
+      y: (map.height - 8) * 16,
+      facing: index % 2 === 0 ? 0 : 2
+    });
+  });
+
+  const landmarkX = settlement.mapId === 'village' ? 19 : settlement.mapId === 'dijon' ? 19 : 18;
+  const landmarkY = map.height - 7;
+  const landmarkRow = map.layout[landmarkY].split('');
+  landmarkRow[landmarkX] = settlement.landmark;
+  map.layout[landmarkY] = landmarkRow.join('');
+
+  for (const x of [6, 8, 24, 27]) {
+    const flowerRow = map.layout[map.height - 8].split('');
+    flowerRow[x] = 'F';
+    map.layout[map.height - 8] = flowerRow.join('');
+  }
+  if (settlement.mapId === 'dijon') {
+    for (let x = 16; x <= 20; x++) {
+      const vineRow = map.layout[map.height - 9].split('');
+      vineRow[x] = 'G';
+      map.layout[map.height - 9] = vineRow.join('');
+    }
+  }
+}
+
+const forest = WORLD_MAPS.forest;
+for (const [x, y] of [[15, 20], [16, 20], [21, 21], [22, 21], [7, 22], [8, 22], [26, 17], [27, 17]]) {
+  const row = forest.layout[y].split('');
+  row[x] = 'T';
+  forest.layout[y] = row.join('');
+}
+forest.layout[20] = forest.layout[20].split('').map((tile, x) => x >= 9 && x <= 21 ? 'D' : tile).join('');
+forest.layout[22] = forest.layout[22].split('').map((tile, x) => x >= 12 && x <= 14 ? 'F' : tile).join('');
+forest.layout[21] = forest.layout[21].split('').map((tile, x) => x === 18 ? 'Z' : tile).join('');
+forest.npcs.push({
+  id: 'woods_forager',
+  name: 'Maëlle the Forager',
+  sprite: 'npc_vintner',
+  x: 19 * 16,
+  y: 22 * 16,
+  facing: 2
+});

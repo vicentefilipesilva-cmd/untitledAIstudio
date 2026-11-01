@@ -1,0 +1,6 @@
+{
+  "name": "Legend of the Chivalric Fall",
+  "description": "15th-Century French Medieval Game Boy Advance (GBA) 32-bit action adventure RPG in the Kingdom of Aethelgard with 240x160 widescreen viewport, L/R shoulder mechanics, rich French quests, and stereo chiptune audio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
