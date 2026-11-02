@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DialoguePage, QUEST_STATE, QuestLogItem, QuestStateType, SideQuestProgress } from '../types/game';
+import { CityStoryQuestId, CityStoryQuestStatus, DialoguePage, QUEST_STATE, QuestLogItem, QuestStateType, SideQuestProgress } from '../types/game';
 import { audioManager } from './audio';
 import { NearbyInteractable, Player } from './entities';
 import { spriteManager } from './sprites';
@@ -63,9 +63,48 @@ const SIDE_QUESTS: SideQuestDefinition[] = [
   }
 ];
 
+const CITY_STORY_QUESTS: Array<{
+  id: CityStoryQuestId;
+  npcId: string;
+  title: string;
+  location: string;
+  description: string;
+  objective: string;
+  reward: string;
+  rewardCoins: number;
+  offer: string;
+  completion: string;
+}> = [
+  {
+    id: 'orleans-ledger',
+    npcId: 'orleans_citizen',
+    title: 'The Seized Civic Ledger',
+    location: 'Orléans',
+    description: 'Recover the city ledger seized by the corrupt royal knight and return it to the council.',
+    objective: 'Defeat the corrupt royal knight in Orléans, then return the ledger to the city council.',
+    reward: 'Route 4 clearance + 30 coins',
+    rewardCoins: 30,
+    offer: 'A royal knight seized Orléans’s civic ledger to hide the Crown’s debts. He still patrols the eastern square. Recover it and bring it back; the northern gate will remain closed until the council has its records.',
+    completion: 'The ledger is back in the council’s hands. The northern gate is open, and the people can prove what the Crown took from them.'
+  },
+  {
+    id: 'tours-archive',
+    npcId: 'tours_scholar',
+    title: 'The Sealed Chapel Archive',
+    location: 'Tours',
+    description: 'Recover the chapel archive key from the corrupt knight and reopen the archive.',
+    objective: 'Defeat the corrupt knight in Tours, then return the chapel key to the scholar.',
+    reward: 'Route 5 clearance + 35 coins',
+    rewardCoins: 35,
+    offer: 'The chapel archive has been sealed since a corrupt knight took its key. He patrols the eastern square. Recover the key and bring it back so we can reopen the archive; the northern road will stay closed until then.',
+    completion: 'The archive is open again, and its records are safe. The northern road is clear; take care among the vineyards.'
+  }
+];
+
 export class DialogueSystem {
   public questState: QuestStateType = QUEST_STATE.NOT_STARTED;
   public sideQuestProgress: Record<string, SideQuestProgress> = {};
+  public cityStoryQuestProgress: Partial<Record<CityStoryQuestId, CityStoryQuestStatus>> = {};
   public isOpen = false;
   public pages: DialoguePage[] = [];
   public currentPageIndex = 0;
@@ -127,6 +166,26 @@ export class DialogueSystem {
       description: 'Advance past the royal guard captains on the highway and defeat tyrant King Raymond IV in his citadel.',
       completed: false,
       reward: 'Liberation of Aethelgard & Peace'
+    },
+    {
+      id: 'orleans-ledger',
+      title: 'The Seized Civic Ledger',
+      act: 'Act II',
+      location: 'Orléans',
+      description: 'Recover the city ledger seized by the corrupt royal knight and return it to the council.',
+      completed: false,
+      status: 'available',
+      objective: 'Speak with the city representative in the market.'
+    },
+    {
+      id: 'tours-archive',
+      title: 'The Sealed Chapel Archive',
+      act: 'Act II',
+      location: 'Tours',
+      description: 'Recover the chapel archive key from the corrupt knight and reopen the archive.',
+      completed: false,
+      status: 'available',
+      objective: 'Speak with the scholar in the chapel.'
     },
     {
       id: 'whispering-woods-cache',
@@ -232,6 +291,20 @@ export class DialogueSystem {
         quest.completed = this.questState >= completionStates[index];
         return;
       }
+      const cityQuest = CITY_STORY_QUESTS.find(entry => entry.id === quest.id);
+      if (cityQuest) {
+        const status = this.cityStoryQuestProgress[cityQuest.id];
+        quest.status = status ?? 'available';
+        quest.completed = status === 'completed';
+        quest.objective = status === 'active'
+          ? cityQuest.objective
+          : status === 'ready'
+            ? 'Return to the quest giver to complete the mission and receive your reward.'
+            : status === 'completed'
+              ? 'Mission complete.'
+              : `Speak with ${cityQuest.npcId === 'orleans_citizen' ? 'the city representative' : 'the chapel scholar'} to begin.`;
+        return;
+      }
       const definition = SIDE_QUESTS.find(entry => entry.id === quest.id);
       if (!definition) return;
       const progress = this.sideQuestProgress[quest.id];
@@ -256,6 +329,27 @@ export class DialogueSystem {
       typeof entry === 'object' &&
       ['active', 'ready', 'completed'].includes((entry as SideQuestProgress).status)
     );
+  }
+
+  public isValidCityStoryQuestProgress(value: unknown): value is Partial<Record<CityStoryQuestId, CityStoryQuestStatus>> | undefined {
+    if (value === undefined) return true;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.entries(value).every(([id, status]) =>
+      CITY_STORY_QUESTS.some(quest => quest.id === id) &&
+      ['active', 'ready', 'completed'].includes(status as string)
+    );
+  }
+
+  public markCityStoryQuestReady(id: CityStoryQuestId) {
+    if (this.cityStoryQuestProgress[id] !== 'active') return false;
+    this.cityStoryQuestProgress[id] = 'ready';
+    this.syncQuestLog();
+    return true;
+  }
+
+  public resetCityStoryQuests() {
+    this.cityStoryQuestProgress = {};
+    this.syncQuestLog();
   }
 
   public resetSideQuests() {
@@ -461,10 +555,8 @@ export class DialogueSystem {
         this.handleBlacksmithDialogue(player);
       } else if (npc.id === 'merchant') {
         this.handleMerchantDialogue();
-      } else if (npc.id === 'orleans_citizen') {
-        this.startDialogue([{ speaker: "Le Citoyen d'Orléans", text: 'The lords in Le Château Noir bleed our lands dry. Word has it the King has forsaken his knightly oath.' }]);
-      } else if (npc.id === 'tours_scholar') {
-        this.startDialogue([{ speaker: 'Le Moine de Tours', text: 'Ancient scriptures foretold of a righteous youth who would raise the Wind-Cleaver to cleanse the throne of Aethelgard.' }]);
+      } else if (npc.id === 'orleans_citizen' || npc.id === 'tours_scholar') {
+        this.handleCityStoryQuest(npc.id, npc.name, player, onMapReceived);
       } else if (npc.id === 'vintner') {
         this.handleVintnerDialogue(player);
       } else if (npc.id === 'woods_forager') {
@@ -507,6 +599,40 @@ export class DialogueSystem {
       } else {
         this.startDialogue([{ speaker: npc.name, text: 'There is always plenty to do around here. It is good to see a traveler passing through—take care on the roads!' }]);
       }
+    }
+  }
+
+  private handleCityStoryQuest(
+    npcId: string,
+    speaker: string,
+    player: Player,
+    onSave?: () => void
+  ) {
+    const quest = CITY_STORY_QUESTS.find(entry => entry.npcId === npcId);
+    if (!quest) return;
+    const status = this.cityStoryQuestProgress[quest.id];
+
+    if (!status) {
+      this.startDialogue([{ speaker, text: quest.offer }], () => {
+        this.cityStoryQuestProgress[quest.id] = 'active';
+        this.syncQuestLog();
+        onSave?.();
+      });
+    } else if (status === 'active') {
+      this.startDialogue([{ speaker, text: quest.objective }]);
+    } else if (status === 'ready') {
+      this.startDialogue([
+        { speaker, text: quest.completion },
+        { speaker: 'SYSTEM', text: `Received ${quest.rewardCoins} coins. ${quest.reward}` }
+      ], () => {
+        player.coins += quest.rewardCoins;
+        this.cityStoryQuestProgress[quest.id] = 'completed';
+        this.syncQuestLog();
+        audioManager.playQuestDone();
+        onSave?.();
+      });
+    } else {
+      this.startDialogue([{ speaker, text: quest.completion }]);
     }
   }
 

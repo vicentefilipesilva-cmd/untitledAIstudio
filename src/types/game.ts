@@ -61,7 +61,7 @@ export interface ExitTrigger {
   targetX: number;
   targetY: number;
   targetFacing: Direction;
-  condition?: 'canEnterTown' | 'canEnterRoute1' | 'canEnterHighroad' | 'hasWineIntel' | 'canEnterCastle';
+  condition?: 'canEnterTown' | 'canEnterRoute1' | 'canEnterHighroad' | 'hasWineIntel' | 'canEnterCastle' | 'canEnterRoute4' | 'canEnterRoute5';
   lockMessage?: string;
 }
 
@@ -85,6 +85,7 @@ export interface PuzzleDefinition {
   plate?: Point;
   barriers: Point[];
   gates: Point[];
+  openTile?: 'D' | 'C';
   secrets?: Point[];
   traps?: Point[];
   chest: Point;
@@ -159,3 +160,6 @@ export interface QuestLogItem {
 export interface SideQuestProgress {
   status: 'active' | 'ready' | 'completed';
 }
+
+export type CityStoryQuestId = 'orleans-ledger' | 'tours-archive';
+export type CityStoryQuestStatus = 'active' | 'ready' | 'completed';

@@ -30,10 +30,10 @@ export function sealPuzzleBarriers(mapData: MapData, puzzle: PuzzleDefinition) {
 }
 
 export function openPuzzleBarriers(mapData: MapData, puzzle: PuzzleDefinition) {
-  setPuzzleBarrierTile(mapData, puzzle, 'D');
+  setPuzzleBarrierTile(mapData, puzzle, puzzle.openTile ?? 'D');
 }
 
-function setPuzzleBarrierTile(mapData: MapData, puzzle: PuzzleDefinition, tile: 'D' | 'M') {
+function setPuzzleBarrierTile(mapData: MapData, puzzle: PuzzleDefinition, tile: 'D' | 'C' | 'M') {
   for (const point of puzzle.barriers) {
     const row = mapData.layout[point.y];
     if (!row || point.x < 0 || point.x >= row.length) continue;

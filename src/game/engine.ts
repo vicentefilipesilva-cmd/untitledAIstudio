@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Bounds, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, SideQuestProgress, TILE_SIZE } from '../types/game';
+import { Bounds, CityStoryQuestId, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, SideQuestProgress, TILE_SIZE } from '../types/game';
 import { audioManager } from './audio';
 import { dialogueManager } from './dialogue';
 import { BossKing, Enemy, NearbyInteractable, NPC, Pickup, Player, PlayerInventory } from './entities';
@@ -36,6 +36,7 @@ interface GameSaveData {
   playerHasIronOre?: boolean;
   puzzleProgress?: Record<string, Record<string, PuzzleProgress>>;
   sideQuestProgress?: Record<string, SideQuestProgress>;
+  cityStoryQuestProgress?: Record<CityStoryQuestId, 'active' | 'ready' | 'completed'>;
 }
 
 const isGameSaveData = (value: unknown): value is GameSaveData => {
@@ -65,6 +66,7 @@ const isGameSaveData = (value: unknown): value is GameSaveData => {
       data.questState >= QUEST_STATE.NOT_STARTED && data.questState <= QUEST_STATE.VICTORY_LIBERATION)) &&
     booleanFields.every(field => data[field] === undefined || typeof data[field] === 'boolean') &&
     dialogueManager.isValidSideQuestProgress(data.sideQuestProgress) &&
+    dialogueManager.isValidCityStoryQuestProgress(data.cityStoryQuestProgress) &&
     isSavedPuzzleProgress(data.puzzleProgress);
 };
 
@@ -640,6 +642,22 @@ export class GameEngine {
             ]);
             return;
           }
+        } else if (exit.condition === 'canEnterRoute4') {
+          if (dialogueManager.cityStoryQuestProgress['orleans-ledger'] !== 'completed') {
+            pushBack();
+            dialogueManager.startDialogue([
+              { speaker: 'Le Citoyen d’Orléans', text: exit.lockMessage || 'The northern gate stays closed until the civic ledger is returned to the city council.' }
+            ]);
+            return;
+          }
+        } else if (exit.condition === 'canEnterRoute5') {
+          if (dialogueManager.cityStoryQuestProgress['tours-archive'] !== 'completed') {
+            pushBack();
+            dialogueManager.startDialogue([
+              { speaker: 'Le Moine de Tours', text: exit.lockMessage || 'The northern road stays closed until the chapel archive is reopened.' }
+            ]);
+            return;
+          }
         }
 
         this.changeMapWithTransition(exit.targetMap, exit.targetX, exit.targetY, exit.targetFacing);
@@ -734,6 +752,16 @@ export class GameEngine {
           this.player.hasRoyalDecree = true;
           this.player.hasWineBarrel = true;
           audioManager.playItemGet();
+        }
+        const cityQuestId: CityStoryQuestId | null =
+          enemy.isQuestTarget === 'orleans_ledger_guard' ? 'orleans-ledger'
+            : enemy.isQuestTarget === 'tours_archive_guard' ? 'tours-archive'
+              : null;
+        if (cityQuestId && dialogueManager.markCityStoryQuestReady(cityQuestId)) {
+          const item = cityQuestId === 'orleans-ledger' ? 'the civic ledger' : 'the chapel archive key';
+          dialogueManager.startDialogue([{ speaker: 'Young Hero', text: `I recovered ${item}. I should return it to its rightful keeper.` }]);
+          audioManager.playItemGet();
+          this.autoSave();
         }
       }
     }
@@ -889,6 +917,7 @@ export class GameEngine {
     window.playerHasIronOre = false;
     dialogueManager.questState = QUEST_STATE.NOT_STARTED;
     dialogueManager.resetSideQuests();
+    dialogueManager.resetCityStoryQuests();
     dialogueManager.syncQuestLog();
 
     this.removeSavedGame();
@@ -927,6 +956,7 @@ export class GameEngine {
         swordDamage: this.player.swordDamage,
         questState: dialogueManager.questState,
         sideQuestProgress: dialogueManager.sideQuestProgress,
+        cityStoryQuestProgress: dialogueManager.cityStoryQuestProgress,
         playerHasIronOre: window.playerHasIronOre,
         puzzleProgress: this.getSavedPuzzleProgress()
       };
@@ -968,6 +998,7 @@ export class GameEngine {
       });
       dialogueManager.questState = data.questState ?? QUEST_STATE.NOT_STARTED;
       dialogueManager.sideQuestProgress = data.sideQuestProgress ?? {};
+      dialogueManager.cityStoryQuestProgress = data.cityStoryQuestProgress ?? {};
       dialogueManager.syncQuestLog();
       window.playerHasIronOre = data.playerHasIronOre === true;
       this.syncEquipmentFromQuestProgress();

@@ -473,7 +473,9 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetMap: 'route4',
         targetX: 9 * 16 + 4,
         targetY: 12 * 16,
-        targetFacing: 1
+        targetFacing: 1,
+        condition: 'canEnterRoute4',
+        lockMessage: 'The northern gate is sealed. Recover Orléans’s civic ledger from the corrupt royal knight, then return it to the city council.'
       }
     ],
     doors: [
@@ -481,7 +483,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
     ],
     npcs: [],
     enemies: [
-      { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
+      { type: 'corrupt_knight', x: 12 * 16, y: 7 * 16, patrolAxis: 'x', patrolMin: 11 * 16, patrolMax: 13 * 16, isQuestTarget: 'orleans_ledger_guard', neutralUntilProvoked: true }
     ],
     signText: "Orléans: Ancient bastions and trade markets.\n▲ North: Route 4 to Tours | ◀ West: Route 2."
   },
@@ -569,7 +571,9 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetMap: 'route5',
         targetX: 9 * 16 + 4,
         targetY: 12 * 16,
-        targetFacing: 1
+        targetFacing: 1,
+        condition: 'canEnterRoute5',
+        lockMessage: 'The northern road is closed. Help the scholar recover the chapel archive key and reopen the Tours archive first.'
       }
     ],
     doors: [
@@ -577,7 +581,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
     ],
     npcs: [],
     enemies: [
-      { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
+      { type: 'corrupt_knight', x: 12 * 16, y: 7 * 16, patrolAxis: 'x', patrolMin: 11 * 16, patrolMax: 13 * 16, isQuestTarget: 'tours_archive_guard', neutralUntilProvoked: true }
     ],
     signText: "Tours: Gothic spires reflecting upon serene waters.\n▲ North: Route 5 to Dijon vineyards | ▶ East: Route 4."
   },
@@ -1034,6 +1038,205 @@ for (const mapId of EXPANDED_MAP_IDS) {
   expandWorldMap(map, settlement?.border || 'T');
 }
 
+const ROUTE_MAP_IDS = ['route1', 'route2', 'route4', 'route5', 'royalRoad'];
+
+const createLabyrinthRoute = (map: MapData) => {
+  const width = 40;
+  const height = 30;
+  const wall = map.id === 'royalRoad' ? 'M' : 'T';
+  const floor = map.id === 'royalRoad' ? 'C' : 'D';
+  const originalExits = map.exits.map(exit => ({
+    exit,
+    edge: getExitEdge(exit, map)
+  }));
+  const grid = Array.from({ length: height }, () => Array(width).fill(wall));
+  let seed = [...map.id].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 17);
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  const neighbors = (x: number, y: number) => {
+    const options = [[0, -2], [2, 0], [0, 2], [-2, 0]];
+    for (let index = options.length - 1; index > 0; index--) {
+      const swap = Math.floor(random() * (index + 1));
+      [options[index], options[swap]] = [options[swap], options[index]];
+    }
+    return options
+      .map(([dx, dy]) => [x + dx, y + dy] as const)
+      .filter(([nx, ny]) => nx > 0 && nx < width - 1 && ny > 0 && ny < height - 1 && grid[ny][nx] === wall);
+  };
+  const carve = (x: number, y: number) => {
+    grid[y][x] = floor;
+  };
+  const connectEntrance = (edge: MapEdge, x: number, y: number) => {
+    if (edge === 'north' || edge === 'south') {
+      const row = edge === 'north' ? 0 : height - 1;
+      const innerRow = edge === 'north' ? 1 : height - 2;
+      carve(x, row);
+      carve(x, innerRow);
+      if (x % 2 === 0) carve(x - 1, innerRow);
+    } else {
+      const column = edge === 'west' ? 0 : width - 1;
+      const innerColumn = edge === 'west' ? 1 : width - 2;
+      carve(column, y);
+      carve(innerColumn, y);
+      if (y % 2 === 0) carve(innerColumn, y - 1);
+    }
+  };
+  const stack: Array<[number, number]> = [[1, 1]];
+  carve(1, 1);
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const [nextX, nextY] = neighbors(x, y)[0] || [];
+    if (nextX === undefined || nextY === undefined) {
+      stack.pop();
+      continue;
+    }
+    carve((x + nextX) / 2, (y + nextY) / 2);
+    carve(nextX, nextY);
+    stack.push([nextX, nextY]);
+  }
+
+  for (const { exit, edge } of originalExits) {
+    if (!edge) throw new Error(`Route exit is not on a map edge: ${map.id} -> ${exit.targetMap}`);
+    const centerX = Math.floor((exit.trigger.x + exit.trigger.w / 2) / TILE_SIZE);
+    const centerY = Math.floor((exit.trigger.y + exit.trigger.h / 2) / TILE_SIZE);
+    const openingX = edge === 'west' ? 0 : edge === 'east' ? width - 1 : Math.max(2, Math.min(width - 3, centerX));
+    const openingY = edge === 'north' ? 0 : edge === 'south' ? height - 1 : Math.max(2, Math.min(height - 3, centerY));
+    connectEntrance(edge, openingX, openingY);
+    exit.trigger = edge === 'west'
+      ? { x: 0, y: openingY * TILE_SIZE - 8, w: 14, h: 32 }
+      : edge === 'east'
+        ? { x: width * TILE_SIZE - 14, y: openingY * TILE_SIZE - 8, w: 14, h: 32 }
+        : edge === 'north'
+          ? { x: openingX * TILE_SIZE - 8, y: 0, w: 32, h: 14 }
+          : { x: openingX * TILE_SIZE - 8, y: height * TILE_SIZE - 14, w: 32, h: 14 };
+  }
+
+  for (let x = 14; x <= 30; x++) {
+    grid[10][x] = wall;
+    grid[20][x] = wall;
+  }
+  for (let y = 11; y <= 19; y++) {
+    grid[y][14] = wall;
+    grid[y][30] = wall;
+    for (let x = 15; x <= 29; x++) carve(x, y);
+  }
+  carve(14, 15);
+  for (let x = 10; x <= 15; x++) carve(x, 15);
+  for (let x = 2; x <= width - 3; x++) carve(x, 1);
+  for (let y = 1; y < height - 1; y++) {
+    carve(2, y);
+    carve(width - 3, y);
+  }
+  for (const { exit, edge } of originalExits) {
+    const centerX = Math.floor((exit.trigger.x + exit.trigger.w / 2) / TILE_SIZE);
+    const centerY = Math.floor((exit.trigger.y + exit.trigger.h / 2) / TILE_SIZE);
+    if (edge === 'north' || edge === 'south') {
+      for (let y = 1; y < height - 1; y++) carve(centerX, y);
+    } else {
+      const spineX = edge === 'west' ? 2 : width - 3;
+      const openingX = edge === 'west' ? 1 : width - 2;
+      for (let y = 1; y <= centerY; y++) carve(spineX, y);
+      carve(openingX, centerY);
+    }
+  }
+
+  map.enemies.forEach((enemy, index) => {
+    const x = 4 + (index * 5) % 8;
+    const y = 4 + (index * 7) % 22;
+    for (let corridorX = x - 1; corridorX <= x + 1; corridorX++) carve(corridorX, y);
+    enemy.x = x * TILE_SIZE;
+    enemy.y = y * TILE_SIZE;
+    enemy.patrolAxis = 'x';
+    enemy.patrolMin = (x - 1) * TILE_SIZE;
+    enemy.patrolMax = (x + 1) * TILE_SIZE;
+  });
+
+  map.width = width;
+  map.height = height;
+  const puzzleClues: Record<string, string> = {
+    route1: 'Push the carved block onto its matching floor plate.',
+    route2: 'Pull the bridge levers in this order: middle, left, right.',
+    route4: 'Strike the trail markers in this order: left, right, middle.',
+    route5: 'Push the vineyard stone onto its matching floor plate.',
+    royalRoad: 'Strike the royal seals in this order: right, left, middle.'
+  };
+  grid[2][4] = 'S';
+  map.layout = grid.map(row => row.join(''));
+  map.signText = `${map.signText || map.name}\nTrail puzzle: ${puzzleClues[map.id]} Solve the sealed gate to uncover a hidden cache.`;
+}
+
+for (const mapId of ROUTE_MAP_IDS) {
+  const route = WORLD_MAPS[mapId];
+  if (!route) throw new Error(`Missing route map for labyrinth generation: ${mapId}`);
+  createLabyrinthRoute(route);
+}
+
+const expandForestRoute = (map: MapData) => {
+  const oldWidth = map.width;
+  const oldHeight = map.height;
+  const width = 40;
+  const height = 30;
+  const originalExits = map.exits.map(exit => ({ exit, edge: getExitEdge(exit, map) }));
+  const grid = Array.from({ length: height }, () => Array(width).fill('T'));
+  map.layout.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) grid[y][x] = row[x] || '.';
+  });
+  const carve = (x: number, y: number) => {
+    if (x >= 0 && x < width && y >= 0 && y < height) grid[y][x] = 'D';
+  };
+  const seedCells = Array.from({ length: 42 }, (_, index) => [33 + (index % 3) * 2, 1 + Math.floor(index / 3) * 2] as const)
+    .filter(([x, y]) => x < 38 && y < 28);
+  let seed = 811;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x80000000;
+  };
+  const carved = new Set<string>();
+  const stack: Array<readonly [number, number]> = [];
+  if (seedCells[0]) {
+    stack.push(seedCells[0]);
+    carved.add(seedCells[0].join(','));
+    carve(seedCells[0][0], seedCells[0][1]);
+  }
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const options = [[0, -2], [2, 0], [0, 2], [-2, 0]]
+      .map(([dx, dy]) => [x + dx, y + dy] as const)
+      .filter(([nx, ny]) => seedCells.some(([sx, sy]) => sx === nx && sy === ny) && !carved.has(`${nx},${ny}`));
+    if (!options.length) {
+      stack.pop();
+      continue;
+    }
+    const [nextX, nextY] = options[Math.floor(random() * options.length)];
+    carve((x + nextX) / 2, (y + nextY) / 2);
+    carve(nextX, nextY);
+    carved.add(`${nextX},${nextY}`);
+    stack.push([nextX, nextY]);
+  }
+  for (let x = oldWidth - 3; x < width; x++) carve(x, 15);
+  for (let y = oldHeight - 1; y < height; y++) carve(15, y);
+  for (let x = 11; x <= 19; x++) carve(x, 27);
+
+  for (const { exit, edge } of originalExits) {
+    if (edge === 'east') {
+      exit.trigger.x = width * TILE_SIZE - exit.trigger.w;
+      exit.trigger.y = 15 * TILE_SIZE - 8;
+      for (let x = oldWidth - 1; x < width; x++) carve(x, 15);
+    } else if (edge === 'south') {
+      exit.trigger.y = height * TILE_SIZE - exit.trigger.h;
+      exit.trigger.x = 15 * TILE_SIZE - 8;
+      for (let y = oldHeight - 1; y < height; y++) carve(15, y);
+    }
+  }
+  map.width = width;
+  map.height = height;
+  map.layout = grid.map(row => row.join(''));
+};
+
+expandForestRoute(WORLD_MAPS.forest);
+
 const puzzlePoint = (x: number, y: number) => ({ x, y });
 
 WORLD_MAPS.forest.puzzles = [{
@@ -1054,13 +1257,70 @@ WORLD_MAPS.route1.puzzles = [{
   id: 'river-stone-block',
   type: 'push-block',
   hint: 'Push the carved block onto the matching floor plate.',
-  block: puzzlePoint(14, 11),
-  plate: puzzlePoint(16, 11),
-  barriers: [puzzlePoint(17, 10), puzzlePoint(17, 11), puzzlePoint(17, 12)],
-  gates: [puzzlePoint(17, 11)],
-  secrets: [puzzlePoint(17, 10), puzzlePoint(17, 12)],
-  chest: puzzlePoint(18, 11),
+  block: puzzlePoint(18, 15),
+  plate: puzzlePoint(21, 15),
+  barriers: Array.from({ length: 11 }, (_, index) => puzzlePoint(26, 10 + index)),
+  gates: [puzzlePoint(26, 15)],
+  secrets: [puzzlePoint(27, 15), puzzlePoint(28, 15)],
+  chest: puzzlePoint(29, 15),
   rewardCoins: 25
+}];
+
+WORLD_MAPS.route2.puzzles = [{
+  id: 'bridge-floor-levers',
+  type: 'lever-sequence',
+  hint: 'The bridge stones are marked middle, left, right. Pull the matching floor levers in that order.',
+  levers: [puzzlePoint(17, 14), puzzlePoint(21, 12), puzzlePoint(24, 16)],
+  sequence: [1, 0, 2],
+  barriers: Array.from({ length: 11 }, (_, index) => puzzlePoint(26, 10 + index)),
+  gates: [puzzlePoint(26, 15)],
+  secrets: [puzzlePoint(27, 14), puzzlePoint(28, 14)],
+  traps: [puzzlePoint(24, 14), puzzlePoint(25, 14)],
+  chest: puzzlePoint(29, 14),
+  rewardCoins: 30
+}];
+
+WORLD_MAPS.route4.puzzles = [{
+  id: 'hilltop-target-switches',
+  type: 'target-sequence',
+  hint: 'Strike the three trail markers in the order shown by their symbols: left, right, middle.',
+  targets: [puzzlePoint(17, 14), puzzlePoint(21, 14), puzzlePoint(24, 14)],
+  sequence: [0, 2, 1],
+  barriers: Array.from({ length: 11 }, (_, index) => puzzlePoint(26, 10 + index)),
+  gates: [puzzlePoint(26, 15)],
+  secrets: [puzzlePoint(27, 14), puzzlePoint(28, 14)],
+  traps: [puzzlePoint(24, 15), puzzlePoint(25, 15)],
+  chest: puzzlePoint(29, 14),
+  rewardCoins: 30
+}];
+
+WORLD_MAPS.route5.puzzles = [{
+  id: 'vineyard-stone-block',
+  type: 'push-block',
+  hint: 'Push the carved vineyard stone onto the matching floor plate to lift the gate.',
+  block: puzzlePoint(18, 15),
+  plate: puzzlePoint(21, 15),
+  barriers: Array.from({ length: 11 }, (_, index) => puzzlePoint(26, 10 + index)),
+  gates: [puzzlePoint(26, 15)],
+  secrets: [puzzlePoint(26, 15), puzzlePoint(27, 15)],
+  traps: [puzzlePoint(23, 15), puzzlePoint(24, 15)],
+  chest: puzzlePoint(28, 15),
+  rewardCoins: 35
+}];
+
+WORLD_MAPS.royalRoad.puzzles = [{
+  id: 'royal-road-seal-switches',
+  type: 'target-sequence',
+  hint: 'Strike the royal seals in the order shown by the road markers: right, left, middle.',
+  openTile: 'C',
+  targets: [puzzlePoint(17, 14), puzzlePoint(21, 14), puzzlePoint(24, 14)],
+  sequence: [2, 0, 1],
+  barriers: Array.from({ length: 11 }, (_, index) => puzzlePoint(26, 10 + index)),
+  gates: [puzzlePoint(26, 15)],
+  secrets: [puzzlePoint(27, 14), puzzlePoint(28, 14)],
+  traps: [puzzlePoint(24, 15), puzzlePoint(25, 15)],
+  chest: puzzlePoint(29, 14),
+  rewardCoins: 40
 }];
 
 WORLD_MAPS.dijon.puzzles = [{
@@ -1089,6 +1349,25 @@ for (const map of Object.values(WORLD_MAPS)) {
         continue;
       }
 
+      const trigger = returnExit.trigger;
+      if (edge === 'west' || edge === 'east') {
+        exit.targetX = edge === 'west'
+          ? TILE_SIZE + 2
+          : targetMap.width * TILE_SIZE - TILE_SIZE - 12;
+        exit.targetY = trigger.y + trigger.h / 2 - 5;
+        exit.targetFacing = edge === 'west' ? 3 : 2;
+      } else {
+        exit.targetX = trigger.x + trigger.w / 2 - 6;
+        exit.targetY = edge === 'north'
+          ? TILE_SIZE + 2
+          : targetMap.height * TILE_SIZE - TILE_SIZE - 10;
+        exit.targetFacing = edge === 'north' ? 0 : 1;
+      }
+    } else if (ROUTE_MAP_IDS.includes(exit.targetMap)) {
+      const targetMap = WORLD_MAPS[exit.targetMap];
+      const returnExit = targetMap.exits.find(candidate => candidate.targetMap === map.id);
+      const edge = returnExit && getExitEdge(returnExit, targetMap);
+      if (!edge) throw new Error(`Missing return route exit for ${map.id} -> ${exit.targetMap}.`);
       const trigger = returnExit.trigger;
       if (edge === 'west' || edge === 'east') {
         exit.targetX = edge === 'west'
