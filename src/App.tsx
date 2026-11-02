@@ -266,7 +266,7 @@ export default function App() {
                     <span className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-rose-300">R</span>
                   </div>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Swing your sword to damage and knock back enemies.
+                    Fight with your sword and strike marked switches in order.
                   </span>
                 </div>
 
@@ -277,7 +277,7 @@ export default function App() {
                     <span className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-purple-300">ENTER</span>
                   </div>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Speak to people, enter houses, inspect objects, and continue conversations.
+                    Talk, enter houses, pull levers, open chests, or push blocks onto plates.
                   </span>
                 </div>
               </div>

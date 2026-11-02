@@ -6,6 +6,7 @@
 import { Bounds, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, Direction, DoorData, EnemyData, MapData, NPCData, TILE_SIZE } from '../types/game';
 import { audioManager } from './audio';
 import { TILE_DEFS, WORLD_MAP_OFFSET } from './maps';
+import { completePuzzle, getPuzzleProgress } from './puzzles';
 import { spriteManager } from './sprites';
 
 function drawHitSparks(ctx: CanvasRenderingContext2D, x: number, y: number, timer: number, duration: number) {
@@ -75,10 +76,13 @@ export interface PlayerInventory {
 }
 
 export interface NearbyInteractable {
-  type: 'npc' | 'altar' | 'sign' | 'door';
+  type: 'npc' | 'altar' | 'sign' | 'door' | 'puzzle-lever' | 'puzzle-target' | 'puzzle-block' | 'puzzle-chest';
   entity?: NPC;
   text?: string;
   door?: DoorData;
+  puzzleId?: string;
+  elementIndex?: number;
+  hint?: string;
 }
 
 export class Player extends Entity {
@@ -186,7 +190,8 @@ export class Player extends Entity {
     mapData: MapData,
     npcs: NPC[],
     onNearbyCheck: (interactable: NearbyInteractable | null) => void,
-    onDust?: (x: number, y: number) => void
+    onDust?: (x: number, y: number) => void,
+    onPuzzleChanged?: () => void
   ) {
     if (this.isDead) return;
     if (this.invulnerableTimer > 0) this.invulnerableTimer--;
@@ -212,7 +217,7 @@ export class Player extends Entity {
     if (this.isDashing) {
       this.dashTimer--;
       const speed = this.baseSpeed * 2.3;
-      this.moveWithCollision(this.dashDx * speed, this.dashDy * speed, mapData);
+      this.moveWithCollision(this.dashDx * speed, this.dashDy * speed, mapData, onPuzzleChanged);
 
       if (this.dashTimer % 2 === 0) {
         this.afterimages.push({
@@ -251,7 +256,7 @@ export class Player extends Entity {
 
     // Knockback dampening
     if (Math.abs(this.knockbackX) > 0.1 || Math.abs(this.knockbackY) > 0.1) {
-      this.moveWithCollision(this.knockbackX, this.knockbackY, mapData);
+      this.moveWithCollision(this.knockbackX, this.knockbackY, mapData, onPuzzleChanged);
       this.knockbackX *= 0.8;
       this.knockbackY *= 0.8;
       return;
@@ -277,7 +282,7 @@ export class Player extends Entity {
         this.facing = dy > 0 ? DIR_DOWN : DIR_UP;
       }
 
-      this.moveWithCollision(dx * speed, dy * speed, mapData);
+      this.moveWithCollision(dx * speed, dy * speed, mapData, onPuzzleChanged);
 
       this.walkAnimTimer += 0.2;
       if (this.walkAnimTimer >= 1) {
@@ -352,7 +357,8 @@ export class Player extends Entity {
   public attack(
     enemies: Enemy[],
     boss: BossKing | null,
-    onHit?: (x: number, y: number, dmg: number) => void
+    onHit?: (x: number, y: number, dmg: number) => void,
+    onSwing?: (bounds: Bounds) => void
   ) {
     if (!this.hasSword || this.isAttacking || this.isSpinning || this.attackCooldown > 0 || this.isDead || this.isBlocking) return;
 
@@ -392,6 +398,7 @@ export class Player extends Entity {
       hw = range;
       kx = 3;
     }
+    onSwing?.({ x: hx, y: hy, w: hw, h: hh });
 
     for (const enemy of enemies) {
       if (enemy.isDead) continue;
@@ -451,18 +458,61 @@ export class Player extends Entity {
     audioManager.playSwordUpgrade();
   }
 
-  private moveWithCollision(dx: number, dy: number, mapData: MapData) {
+  private moveWithCollision(dx: number, dy: number, mapData: MapData, onPuzzleChanged?: () => void) {
     const newX = this.x + dx;
-    if (!this.isBlockedAt(newX, this.y, mapData)) {
+    if (!this.isBlockedAt(newX, this.y, mapData) &&
+      !this.tryPushPuzzleBlock(newX, this.y, dx, 0, mapData, onPuzzleChanged)) {
       this.x = newX;
     }
     const newY = this.y + dy;
-    if (!this.isBlockedAt(this.x, newY, mapData)) {
+    if (!this.isBlockedAt(this.x, newY, mapData) &&
+      !this.tryPushPuzzleBlock(this.x, newY, 0, dy, mapData, onPuzzleChanged)) {
       this.y = newY;
     }
     // Keep inside map; exits fire via overlapping edge triggers, not by leaving bounds
     this.x = Math.max(0, Math.min(mapData.width * TILE_SIZE - this.width, this.x));
     this.y = Math.max(0, Math.min(mapData.height * TILE_SIZE - this.height, this.y));
+  }
+
+  private tryPushPuzzleBlock(
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    mapData: MapData,
+    onPuzzleChanged?: () => void
+  ): boolean {
+    if ((dx === 0) === (dy === 0)) return false;
+    const targetX = Math.floor((x + 6) / TILE_SIZE);
+    const targetY = Math.floor((y + 5) / TILE_SIZE);
+    for (const puzzle of mapData.puzzles || []) {
+      if (puzzle.type !== 'push-block' || !puzzle.block || !puzzle.plate) continue;
+      const progress = getPuzzleProgress(mapData, puzzle);
+      if (!progress.block) continue;
+      if (targetX !== progress.block.x || targetY !== progress.block.y) continue;
+      if (progress.solved) return true;
+
+      const nextBlock = {
+        x: progress.block.x + Math.sign(dx),
+        y: progress.block.y + Math.sign(dy)
+      };
+      const tile = mapData.layout[nextBlock.y]?.[nextBlock.x];
+      if (this.isTileBlocking(tile)) return true;
+      const overlapsOtherBlock = (mapData.puzzles || []).some(other => {
+        if (other.id === puzzle.id || other.type !== 'push-block') return false;
+        const otherProgress = getPuzzleProgress(mapData, other);
+        return otherProgress.block?.x === nextBlock.x && otherProgress.block?.y === nextBlock.y;
+      });
+      if (overlapsOtherBlock) return true;
+
+      progress.block = nextBlock;
+      if (nextBlock.x === puzzle.plate.x && nextBlock.y === puzzle.plate.y) {
+        completePuzzle(mapData, puzzle, progress);
+      }
+      onPuzzleChanged?.();
+      return false;
+    }
+    return false;
   }
 
   private isTileBlocking(char: string | undefined): boolean {
@@ -547,6 +597,42 @@ export class Player extends Entity {
       const dist = Math.hypot(playerX - (door.x + 8), playerY - (door.y + 8));
       if (dist < 24) {
         onNearbyCheck({ type: 'door', door });
+        return;
+      }
+    }
+
+    for (const puzzle of mapData.puzzles || []) {
+      const progress = getPuzzleProgress(mapData, puzzle);
+      if (progress.solved) {
+        const chestDistance = Math.hypot(playerX - (puzzle.chest.x * TILE_SIZE + 8), playerY - (puzzle.chest.y * TILE_SIZE + 8));
+        if (!progress.chestClaimed && chestDistance < 28) {
+          onNearbyCheck({ type: 'puzzle-chest', puzzleId: puzzle.id, hint: puzzle.hint });
+          return;
+        }
+        continue;
+      }
+      if (puzzle.type === 'push-block' && progress.block && puzzle.plate) {
+        const blockDistance = Math.hypot(playerX - (progress.block.x * TILE_SIZE + 8), playerY - (progress.block.y * TILE_SIZE + 8));
+        const plateDistance = Math.hypot(playerX - (puzzle.plate.x * TILE_SIZE + 8), playerY - (puzzle.plate.y * TILE_SIZE + 8));
+        if (blockDistance < 26 || plateDistance < 26) {
+          onNearbyCheck({ type: 'puzzle-block', puzzleId: puzzle.id, hint: puzzle.hint });
+          return;
+        }
+      }
+      const elements = puzzle.type === 'lever-sequence' ? puzzle.levers
+        : puzzle.type === 'target-sequence' ? puzzle.targets
+          : undefined;
+      if (!elements) continue;
+      for (let index = 0; index < elements.length; index++) {
+        const point = elements[index];
+        const distance = Math.hypot(playerX - (point.x * TILE_SIZE + 8), playerY - (point.y * TILE_SIZE + 8));
+        if (distance > 26) continue;
+        onNearbyCheck({
+          type: puzzle.type === 'lever-sequence' ? 'puzzle-lever' : 'puzzle-target',
+          puzzleId: puzzle.id,
+          elementIndex: index,
+          hint: puzzle.hint
+        });
         return;
       }
     }

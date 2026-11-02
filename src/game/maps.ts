@@ -86,6 +86,69 @@ const createHouseInterior = (
   };
 };
 
+type VenueStyle = 'tavern' | 'bakery' | 'forge' | 'barracks' | 'market' | 'chapel' | 'wine-cellar' | 'castle-guardroom';
+
+const createVenueInterior = (
+  id: string,
+  name: string,
+  returnMap: string,
+  outsideDoorX: number,
+  outsideDoorY: number,
+  style: VenueStyle,
+  residents: NPCData[] = []
+): MapData => {
+  const map = createHouseInterior(id, name, returnMap, outsideDoorX, outsideDoorY, residents);
+  const layout = map.layout.map(row => row.split(''));
+  const setTile = (x: number, y: number, tile: string) => {
+    layout[y][x] = tile;
+  };
+
+  if (style === 'forge' || style === 'market' || style === 'wine-cellar' || style === 'castle-guardroom') {
+    for (let y = 1; y < 9; y++) {
+      for (let x = 1; x < 11; x++) setTile(x, y, 'C');
+    }
+  }
+  if (style === 'tavern') {
+    for (const [x, y] of [[3, 3], [8, 3], [3, 6], [8, 6]]) setTile(x, y, 'Q');
+    for (let x = 2; x <= 9; x++) setTile(x, 2, 'V');
+  } else if (style === 'bakery') {
+    setTile(8, 2, 'Y');
+    setTile(2, 2, 'U');
+    setTile(8, 3, 'Q');
+  } else if (style === 'forge') {
+    setTile(8, 2, 'Y');
+    setTile(2, 2, 'U');
+    setTile(9, 3, 'Q');
+  } else if (style === 'barracks' || style === 'castle-guardroom') {
+    setTile(2, 2, 'B');
+    setTile(8, 2, 'B');
+    setTile(2, 5, 'B');
+    setTile(8, 5, 'B');
+    setTile(9, 2, 'U');
+  } else if (style === 'market') {
+    setTile(3, 2, 'J');
+    setTile(7, 2, 'J');
+    setTile(8, 5, 'Q');
+  } else if (style === 'chapel') {
+    for (let y = 2; y <= 7; y++) {
+      setTile(5, y, 'V');
+      setTile(6, y, 'V');
+    }
+    setTile(5, 2, 'Q');
+    setTile(2, 4, 'Q');
+    setTile(9, 4, 'Q');
+  } else if (style === 'wine-cellar') {
+    setTile(2, 2, 'G');
+    setTile(3, 2, 'G');
+    setTile(8, 2, 'U');
+    setTile(8, 3, 'U');
+    setTile(8, 5, 'Q');
+  }
+
+  map.layout = layout.map(row => row.join(''));
+  return map;
+};
+
 export const WORLD_MAPS: Record<string, MapData> = {
   village: {
     id: 'village',
@@ -123,10 +186,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       { x: 5 * 16, y: 3 * 16, targetMap: 'oakhaven_cottage', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 },
       { x: 17 * 16, y: 2 * 16, targetMap: 'oakhaven_inn', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
-    npcs: [
-      { id: 'oldman', name: 'Le Doyen Tobias', sprite: 'npc_oldman', x: 6 * 16, y: 4 * 16, facing: 0 },
-      { id: 'village_guard', name: "Le Garde d'Oakhaven", sprite: 'npc_guard', x: 11 * 16, y: 2 * 16, facing: 2 }
-    ],
+    npcs: [],
     enemies: [],
     signText: "Oakhaven Village\n▲ North: Le Bois des Murmures (Forest)\nFollow the dirt road north to reach the Capital."
   },
@@ -226,10 +286,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       { x: 5 * 16, y: 2 * 16, targetMap: 'aiguemorte_bakery', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 },
       { x: 17 * 16, y: 9 * 16, targetMap: 'aiguemorte_home', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
-    npcs: [
-      { id: 'baker_woman', name: 'Madame Renée', sprite: 'npc_baker', x: 4 * 16, y: 8 * 16, facing: 3 },
-      { id: 'town_guard', name: 'Le Garde de la Garnison', sprite: 'npc_guard', x: 11 * 16, y: 2 * 16, facing: 0 }
-    ],
+    npcs: [],
     enemies: [
       { type: 'bandit', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, isQuestTarget: 'flour_bandit', neutralUntilProvoked: true }
     ],
@@ -297,7 +354,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       "M.HH.H...DD...HHHH.M",
       "M........DD........M",
       "M.DDDDDDDDDDDDDDDD..",
-      "M.DDDDDDDYYDDDDDDD..",
+      "M.DDDDDDDE.DDDDDDD..",
       "M........DD........M",
       "M.RRRR...DD...RRRR.M",
       "M.LLIE...DD...ILIE.M",
@@ -324,10 +381,11 @@ export const WORLD_MAPS: Record<string, MapData> = {
         lockMessage: "Maître Pierre warns: The royal highroad is perilous without a shield and honed blade!"
       }
     ],
-    npcs: [
-      { id: 'blacksmith', name: 'Maître Pierre', sprite: 'npc_blacksmith', x: 9 * 16, y: 5 * 16, facing: 3 },
-      { id: 'merchant', name: 'Aldric le Marchand', sprite: 'npc_merchant', x: 4 * 16, y: 8 * 16, facing: 0 }
+    doors: [
+      { x: 9 * 16, y: 6 * 16, targetMap: 'val_de_loire_forge', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 },
+      { x: 17 * 16, y: 2 * 16, targetMap: 'val_de_loire_market', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
+    npcs: [],
     enemies: [],
     signText: "Val-de-Loire Forge: Maître Pierre's Anvil. 'True steel remembers honor.'\n▲ North: Route 2 to Orléans | ▶ East: Route 1."
   },
@@ -418,9 +476,10 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetFacing: 1
       }
     ],
-    npcs: [
-      { id: 'orleans_citizen', name: "Le Citoyen d'Orléans", sprite: 'npc_civilian', x: 4 * 16, y: 8 * 16, facing: 3 }
+    doors: [
+      { x: 5 * 16, y: 2 * 16, targetMap: 'orleans_market', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
+    npcs: [],
     enemies: [
       { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
     ],
@@ -513,9 +572,10 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetFacing: 1
       }
     ],
-    npcs: [
-      { id: 'tours_scholar', name: 'Le Moine de Tours', sprite: 'npc_civilian', x: 5 * 16, y: 8 * 16, facing: 3 }
+    doors: [
+      { x: 5 * 16, y: 2 * 16, targetMap: 'tours_chapel', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
+    npcs: [],
     enemies: [
       { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, neutralUntilProvoked: true }
     ],
@@ -610,9 +670,10 @@ export const WORLD_MAPS: Record<string, MapData> = {
         lockMessage: "The Imperial gate is locked! Intercept the noble convoy in the dark woods to recover the royal orders."
       }
     ],
-    npcs: [
-      { id: 'vintner', name: 'Marc le Vigneron', sprite: 'npc_vintner', x: 4 * 16, y: 8 * 16, facing: 3 }
+    doors: [
+      { x: 5 * 16, y: 2 * 16, targetMap: 'dijon_wine_cellar', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
+    npcs: [],
     enemies: [
       { type: 'corrupt_knight', x: 16 * 16, y: 8 * 16, patrolAxis: 'x', patrolMin: 14 * 16, patrolMax: 18 * 16, isQuestTarget: 'royal_convoy_lord', neutralUntilProvoked: true }
     ],
@@ -678,7 +739,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       "MPPMNNMMK..KMMNNMPPM",
       "MMMMMMMMKVVKMMMMMMMM",
       "CCCCCCCCCVVCCCCCCCCC",
-      "C........VV........C",
+      "C.E......VV........C",
       "C........VV........C",
       "C........VV........C",
       "C........VV........C",
@@ -698,26 +759,56 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetFacing: 0
       }
     ],
+    doors: [
+      { x: 2 * 16, y: 4 * 16, targetMap: 'castle_guardroom', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
+    ],
     npcs: [],
     enemies: [],
     signText: "Le Château Noir Throne Room: The seat of King Raymond IV's tyrannical reign."
   },
 
   oakhaven_cottage: createHouseInterior('oakhaven_cottage', "Tobias's Cottage", 'village', 5, 3, [
-    { id: 'cottage_resident', name: 'Élise the Weaver', sprite: 'npc_baker', x: 4 * 16, y: 4 * 16, facing: 3 },
-    { id: 'cottage_child', name: 'Little Étienne', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
+    { id: 'oldman', name: 'Le Doyen Tobias', sprite: 'npc_oldman', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'cottage_resident', name: 'Élise the Weaver', sprite: 'npc_baker', x: 7 * 16, y: 4 * 16, facing: 2 },
+    { id: 'cottage_child', name: 'Little Étienne', sprite: 'npc_merchant', x: 5 * 16, y: 6 * 16, facing: 0 }
   ]),
-  oakhaven_inn: createHouseInterior('oakhaven_inn', "The Oakhaven Hearth", 'village', 17, 5, [
+  oakhaven_inn: createVenueInterior('oakhaven_inn', "The Oakhaven Hearth", 'village', 17, 5, 'tavern', [
     { id: 'innkeeper', name: 'Perrine the Innkeeper', sprite: 'npc_vintner', x: 4 * 16, y: 4 * 16, facing: 3 },
     { id: 'traveler', name: 'A Traveling Peddler', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
   ]),
-  aiguemorte_bakery: createHouseInterior('aiguemorte_bakery', "Madame Renée's Bakery", 'aiguemorte', 5, 2, [
-    { id: 'bakery_helper', name: 'Luc the Baker', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
-    { id: 'bakery_child', name: 'A Hungry Orphan', sprite: 'npc_baker', x: 7 * 16, y: 4 * 16, facing: 2 }
+  aiguemorte_bakery: createVenueInterior('aiguemorte_bakery', "Madame Renée's Bakery", 'aiguemorte', 5, 2, 'bakery', [
+    { id: 'baker_woman', name: 'Madame Renée', sprite: 'npc_baker', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'bakery_helper', name: 'Luc the Baker', sprite: 'npc_civilian', x: 6 * 16, y: 5 * 16, facing: 3 },
+    { id: 'bakery_child', name: 'A Hungry Orphan', sprite: 'npc_baker', x: 7 * 16, y: 6 * 16, facing: 2 }
   ]),
   aiguemorte_home: createHouseInterior('aiguemorte_home', "Aiguemorte Townhouse", 'aiguemorte', 17, 9, [
-    { id: 'town_resident', name: 'Jeanne the Seamstress', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'town_resident', name: 'Margot the Seamstress', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
     { id: 'town_child', name: 'Young Perrin', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
+  ]),
+  village_barracks: createVenueInterior('village_barracks', "Oakhaven Watch Barracks", 'village', 29, 7, 'barracks', [
+    { id: 'village_guard', name: "Le Garde d'Oakhaven", sprite: 'npc_guard', x: 5 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  aiguemorte_barracks: createVenueInterior('aiguemorte_barracks', 'Aiguemorte Garrison', 'aiguemorte', 29, 7, 'barracks', [
+    { id: 'town_guard', name: 'Le Garde de la Garnison', sprite: 'npc_guard', x: 5 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  val_de_loire_forge: createVenueInterior('val_de_loire_forge', "Maître Pierre's Forge", 'val_de_loire', 9, 6, 'forge', [
+    { id: 'blacksmith', name: 'Maître Pierre', sprite: 'npc_blacksmith', x: 4 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  val_de_loire_market: createVenueInterior('val_de_loire_market', 'Val-de-Loire Trading House', 'val_de_loire', 17, 2, 'market', [
+    { id: 'merchant', name: 'Aldric le Marchand', sprite: 'npc_merchant', x: 5 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  orleans_market: createVenueInterior('orleans_market', "Orléans Merchants' Hall", 'orleans', 5, 2, 'market', [
+    { id: 'orleans_citizen', name: "Le Citoyen d'Orléans", sprite: 'npc_civilian', x: 5 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  tours_chapel: createVenueInterior('tours_chapel', 'Tours Cathedral Chapter House', 'tours', 5, 2, 'chapel', [
+    { id: 'tours_scholar', name: 'Le Moine de Tours', sprite: 'npc_civilian', x: 4 * 16, y: 5 * 16, facing: 3 }
+  ]),
+  dijon_wine_cellar: createVenueInterior('dijon_wine_cellar', 'Dijon Wine Cellar', 'dijon', 5, 2, 'wine-cellar', [
+    { id: 'vintner', name: 'Marc le Vigneron', sprite: 'npc_vintner', x: 5 * 16, y: 4 * 16, facing: 3 }
+  ]),
+  castle_guardroom: createVenueInterior('castle_guardroom', 'Le Château Noir Guard Chamber', 'capital', 2, 4, 'castle-guardroom', [
+    { id: 'castle_guard_captain', name: 'Captain of the Royal Guard', sprite: 'npc_guard', x: 4 * 16, y: 4 * 16, facing: 3 },
+    { id: 'castle_guard', name: 'Royal Guard', sprite: 'npc_guard', x: 7 * 16, y: 4 * 16, facing: 2 }
   ])
 };
 
@@ -731,9 +822,9 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'T',
     landmark: 'X',
     citizens: [
-      ['Bastien the Shepherd', 'npc_vintner'],
-      ['Margot the Gardener', 'npc_baker'],
-      ['Perrin the Cooper', 'npc_merchant']
+      ['Bastien the Shepherd', 'npc_vintner', 'oakhaven_woodcutter'],
+      ['Margot the Gardener', 'npc_baker', 'oakhaven_herbalist'],
+      ['Perrin the Cooper', 'npc_merchant', 'oakhaven_miller']
     ],
     homes: [
       ['oakhaven_miller', "The Miller's Cottage", 'Théo the Miller', 'npc_merchant', 'Lucie the Baker', 'npc_baker'],
@@ -746,14 +837,14 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: '?',
     citizens: [
-      ['Étienne the Ferryman', 'npc_merchant'],
-      ['Sabine the Potter', 'npc_baker'],
-      ['Hugo the Lamplighter', 'npc_civilian']
+      ['Étienne the Ferryman', 'npc_merchant', 'aiguemorte_ferryman'],
+      ['Sabine the Potter', 'npc_baker', 'aiguemorte_potter'],
+      ['Hugo the Lamplighter', 'npc_civilian', 'aiguemorte_lamplighter']
     ],
     homes: [
-      ['aiguemorte_ferryman', 'The Ferryman’s House', 'Étienne the Ferryman', 'npc_merchant', 'Agnès the Net-Mender', 'npc_baker'],
-      ['aiguemorte_potter', 'Sabine’s Pottery', 'Sabine the Potter', 'npc_baker', 'Rémi the Apprentice', 'npc_merchant'],
-      ['aiguemorte_lamplighter', 'The Lamplighter’s Home', 'Hugo the Lamplighter', 'npc_civilian', 'Jeanne the Seamstress', 'npc_vintner']
+      ['aiguemorte_ferryman', 'The Ferryman’s House', 'Gaston the Boatman', 'npc_merchant', 'Agnès the Net-Mender', 'npc_baker'],
+      ['aiguemorte_potter', 'Sabine’s Pottery', 'Rémi the Apprentice', 'npc_baker', 'Jeanne the Seamstress', 'npc_merchant'],
+      ['aiguemorte_lamplighter', 'The Lamplighter’s Home', 'Luc the Lamplighter', 'npc_civilian', 'Jeanne the Lantern-Maker', 'npc_vintner']
     ]
   },
   {
@@ -761,14 +852,14 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: 'Y',
     citizens: [
-      ['Clémence the Smith', 'npc_civilian'],
-      ['Gaspard the Boatman', 'npc_merchant'],
-      ['Adèle the Scribe', 'npc_civilian']
+      ['Clémence the Smith', 'npc_civilian', 'val_de_loire_forge'],
+      ['Gaspard the Boatman', 'npc_merchant', 'loire_boatman'],
+      ['Adèle the Scribe', 'npc_civilian', 'loire_scribe']
     ],
     homes: [
-      ['loire_smith', 'The Smith’s Home', 'Clémence the Smith', 'npc_civilian', 'Benoît the Apprentice', 'npc_merchant'],
-      ['loire_boatman', 'The Boatman’s House', 'Gaspard the Boatman', 'npc_merchant', 'Alix the Weaver', 'npc_baker'],
-      ['loire_scribe', 'The Scribe’s Rooms', 'Adèle the Scribe', 'npc_civilian', 'Paule the Candle-Maker', 'npc_vintner']
+      ['loire_smith', 'The Smith’s Home', 'Benoît the Apprentice', 'npc_civilian', 'Lise the Weaver', 'npc_merchant'],
+      ['loire_boatman', 'The Boatman’s House', 'Céline the Weaver', 'npc_merchant', 'Noël the Net-Mender', 'npc_baker'],
+      ['loire_scribe', 'The Scribe’s Rooms', 'Paule the Candle-Maker', 'npc_civilian', 'Jules the Copyist', 'npc_vintner']
     ]
   },
   {
@@ -776,14 +867,14 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: 'J',
     citizens: [
-      ['Lucette the Flower Seller', 'npc_baker'],
-      ['Martin the Canal Pilot', 'npc_merchant'],
-      ['Héloïse the Bell Ringer', 'npc_civilian']
+      ['Lucette the Flower Seller', 'npc_baker', 'orleans_flower'],
+      ['Martin the Canal Pilot', 'npc_merchant', 'orleans_canal'],
+      ['Héloïse the Bell Ringer', 'npc_civilian', 'orleans_scriptorium']
     ],
     homes: [
-      ['orleans_flower', 'The Flower Seller’s Home', 'Lucette the Flower Seller', 'npc_baker', 'Perrin the Gardener', 'npc_merchant'],
-      ['orleans_scriptorium', 'The Scriptorium', 'Adèle the Copyist', 'npc_civilian', 'Jules the Errand Boy', 'npc_merchant'],
-      ['orleans_canal', 'The Canal Pilot’s House', 'Martin the Canal Pilot', 'npc_merchant', 'Émilie the Spinner', 'npc_vintner']
+      ['orleans_flower', 'The Flower Seller’s Home', 'Perrin the Gardener', 'npc_baker', 'Marie the Florist', 'npc_merchant'],
+      ['orleans_scriptorium', 'The Scriptorium', 'Renaud the Copyist', 'npc_civilian', 'Jules the Errand Boy', 'npc_merchant'],
+      ['orleans_canal', 'The Canal Pilot’s House', 'Émilie the Spinner', 'npc_merchant', 'Noël the Boatman', 'npc_vintner']
     ]
   },
   {
@@ -791,14 +882,14 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: '!',
     citizens: [
-      ['Père Mathieu the Bell Keeper', 'npc_civilian'],
-      ['Isabeau the Baker', 'npc_baker'],
-      ['Robin the River Trader', 'npc_merchant']
+      ['Père Mathieu the Bell Keeper', 'npc_civilian', 'tours_chapel'],
+      ['Isabeau the Baker', 'npc_baker', 'tours_baker'],
+      ['Robin the River Trader', 'npc_merchant', 'tours_trader']
     ],
     homes: [
-      ['tours_bellkeeper', 'The Bell Keeper’s House', 'Père Mathieu', 'npc_civilian', 'Colette the Candlemaker', 'npc_baker'],
-      ['tours_baker', 'Isabeau’s Bakery', 'Isabeau the Baker', 'npc_baker', 'Nicolas the Apprentice', 'npc_merchant'],
-      ['tours_trader', 'The River Trader’s Home', 'Robin the Trader', 'npc_merchant', 'Aline the Weaver', 'npc_vintner']
+      ['tours_bellkeeper', 'The Bell Keeper’s House', 'Colette the Candlemaker', 'npc_civilian', 'Nicolas the Bell Apprentice', 'npc_baker'],
+      ['tours_baker', 'Isabeau’s Bakery', 'Julien the Baker', 'npc_baker', 'Marthe the Cook', 'npc_merchant'],
+      ['tours_trader', 'The River Trader’s Home', 'Aline the Weaver', 'npc_merchant', 'Gautier the Boatman', 'npc_vintner']
     ]
   },
   {
@@ -806,14 +897,14 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: 'G',
     citizens: [
-      ['Marguerite the Vintner', 'npc_vintner'],
-      ['Colin the Cooper', 'npc_merchant'],
-      ['Berthe the Preserver', 'npc_baker']
+      ['Marguerite the Vintner', 'npc_vintner', 'dijon_wine_cellar'],
+      ['Colin the Cooper', 'npc_merchant', 'dijon_cooper'],
+      ['Berthe the Preserver', 'npc_baker', 'dijon_cellar']
     ],
     homes: [
-      ['dijon_vintner', 'The Vintner’s House', 'Marguerite the Vintner', 'npc_vintner', 'Léon the Cellarman', 'npc_merchant'],
-      ['dijon_cooper', 'Colin’s Cooperage', 'Colin the Cooper', 'npc_merchant', 'Jeanne the Preserver', 'npc_baker'],
-      ['dijon_cellar', 'The Old Cellar House', 'Berthe the Preserver', 'npc_baker', 'Amaury the Grape Picker', 'npc_civilian']
+      ['dijon_vintner', 'The Vintner’s House', 'Léon the Cellarman', 'npc_vintner', 'Alix the Weaver', 'npc_merchant'],
+      ['dijon_cooper', 'Colin’s Cooperage', 'Jeanne the Preserver', 'npc_merchant', 'Rémi the Cooper', 'npc_baker'],
+      ['dijon_cellar', 'The Old Cellar House', 'Amaury the Grape Picker', 'npc_baker', 'Hélène the Preserver', 'npc_civilian']
     ]
   }
 ] as const;
@@ -926,6 +1017,49 @@ for (const mapId of EXPANDED_MAP_IDS) {
   expandWorldMap(map, settlement?.border || 'T');
 }
 
+const puzzlePoint = (x: number, y: number) => ({ x, y });
+
+WORLD_MAPS.forest.puzzles = [{
+  id: 'whispering-levers',
+  type: 'lever-sequence',
+  hint: 'The forest inscription reads: middle, left, right.',
+  levers: [puzzlePoint(20, 18), puzzlePoint(18, 18), puzzlePoint(22, 18)],
+  sequence: [0, 1, 2],
+  barriers: [puzzlePoint(25, 16), puzzlePoint(25, 17), puzzlePoint(25, 18)],
+  gates: [puzzlePoint(25, 17)],
+  secrets: [puzzlePoint(26, 17), puzzlePoint(27, 17)],
+  traps: [puzzlePoint(23, 17), puzzlePoint(24, 17)],
+  chest: puzzlePoint(28, 17),
+  rewardCoins: 20
+}];
+
+WORLD_MAPS.route1.puzzles = [{
+  id: 'river-stone-block',
+  type: 'push-block',
+  hint: 'Push the carved block onto the matching floor plate.',
+  block: puzzlePoint(14, 11),
+  plate: puzzlePoint(16, 11),
+  barriers: [puzzlePoint(17, 10), puzzlePoint(17, 11), puzzlePoint(17, 12)],
+  gates: [puzzlePoint(17, 11)],
+  secrets: [puzzlePoint(17, 10), puzzlePoint(17, 12)],
+  chest: puzzlePoint(18, 11),
+  rewardCoins: 25
+}];
+
+WORLD_MAPS.dijon.puzzles = [{
+  id: 'shadow-switches',
+  type: 'target-sequence',
+  hint: 'Strike the vine-marked switches in the order shown: right, left, middle.',
+  targets: [puzzlePoint(20, 18), puzzlePoint(22, 18), puzzlePoint(18, 18)],
+  sequence: [1, 2, 0],
+  barriers: [puzzlePoint(25, 17), puzzlePoint(25, 18), puzzlePoint(25, 19)],
+  gates: [puzzlePoint(25, 18)],
+  secrets: [puzzlePoint(26, 18), puzzlePoint(27, 18)],
+  traps: [puzzlePoint(23, 18), puzzlePoint(24, 18)],
+  chest: puzzlePoint(28, 18),
+  rewardCoins: 30
+}];
+
 for (const map of Object.values(WORLD_MAPS)) {
   for (const exit of map.exits) {
     if (EXPANDED_MAP_IDS.has(exit.targetMap)) {
@@ -977,6 +1111,23 @@ const addDistrictBuilding = (map: MapData, startX: number, roofY: number) => {
   });
 };
 
+for (const [mapId, targetMap] of [
+  ['village', 'village_barracks'],
+  ['aiguemorte', 'aiguemorte_barracks']
+] as const) {
+  const map = WORLD_MAPS[mapId];
+  addDistrictBuilding(map, 27, 5);
+  map.doors = map.doors || [];
+  map.doors.push({
+    x: 30 * 16,
+    y: 6 * 16,
+    targetMap,
+    targetX: 5 * 16,
+    targetY: 7 * 16,
+    targetFacing: 0
+  });
+}
+
 for (const settlement of SETTLEMENT_EXPANSIONS) {
   const map = WORLD_MAPS[settlement.mapId];
   const houseY = map.height - 5;
@@ -999,29 +1150,22 @@ for (const settlement of SETTLEMENT_EXPANSIONS) {
       targetY: 7 * 16,
       targetFacing: 0
     });
-    map.npcs.push({
-      id: `${houseId}_neighbor`,
-      name: firstName,
-      sprite: firstSprite,
-      x: (houseX + 1) * 16,
-      y: roadY * 16,
-      facing: 0
-    });
-
     WORLD_MAPS[houseId] = createHouseInterior(houseId, houseName, map.id, houseX + 2, houseY + 2, [
       { id: `${houseId}_resident`, name: firstName, sprite: firstSprite, x: 4 * 16, y: 4 * 16, facing: 3 },
       { id: `${houseId}_family`, name: secondName, sprite: secondSprite, x: 7 * 16, y: 4 * 16, facing: 2 }
     ], index);
   });
 
-  settlement.citizens.forEach(([name, sprite], index) => {
-    map.npcs.push({
+  settlement.citizens.forEach(([name, sprite, interiorId], index) => {
+    const interior = WORLD_MAPS[interiorId];
+    if (!interior) throw new Error(`Missing NPC interior "${interiorId}" for ${settlement.mapId}.`);
+    interior.npcs.push({
       id: `${settlement.mapId}_citizen_${index + 1}`,
       name,
       sprite,
-      x: (8 + index * 6) * 16,
-      y: (map.height - 8) * 16,
-      facing: index % 2 === 0 ? 0 : 2
+      x: 5 * 16,
+      y: 6 * 16,
+      facing: 0
     });
   });
 

@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE } from '../types/game';
+import { Bounds, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE } from '../types/game';
 import { audioManager } from './audio';
 import { dialogueManager } from './dialogue';
 import { BossKing, Enemy, NearbyInteractable, NPC, Pickup, Player, PlayerInventory } from './entities';
 import { isExpandedWorldMap, TILE_DEFS, WORLD_MAP_OFFSET, WORLD_MAPS } from './maps';
+import { completePuzzle, getPuzzleProgress, sealPuzzleBarriers } from './puzzles';
 import { spriteManager } from './sprites';
 
 const CANVAS_RENDER_SCALE = 2;
@@ -33,6 +34,7 @@ interface GameSaveData {
   swordDamage?: number;
   questState?: QuestStateType;
   playerHasIronOre?: boolean;
+  puzzleProgress?: Record<string, Record<string, PuzzleProgress>>;
 }
 
 const isGameSaveData = (value: unknown): value is GameSaveData => {
@@ -60,8 +62,40 @@ const isGameSaveData = (value: unknown): value is GameSaveData => {
     (data.swordDamage === undefined || data.swordDamage === 1 || data.swordDamage === 2) &&
     (data.questState === undefined || (typeof data.questState === 'number' && Number.isInteger(data.questState) &&
       data.questState >= QUEST_STATE.NOT_STARTED && data.questState <= QUEST_STATE.VICTORY_LIBERATION)) &&
-    booleanFields.every(field => data[field] === undefined || typeof data[field] === 'boolean');
+    booleanFields.every(field => data[field] === undefined || typeof data[field] === 'boolean') &&
+    isSavedPuzzleProgress(data.puzzleProgress);
 };
+
+function isSavedPuzzleProgress(value: unknown): value is Record<string, Record<string, PuzzleProgress>> | undefined {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.entries(value).every(([mapId, progressById]) => {
+    const map = WORLD_MAPS[mapId];
+    if (!map || !progressById || typeof progressById !== 'object' || Array.isArray(progressById)) return false;
+    return Object.entries(progressById).every(([puzzleId, progress]) => {
+      const puzzle = map.puzzles?.find(entry => entry.id === puzzleId);
+      if (!puzzle || !progress || typeof progress !== 'object' || Array.isArray(progress)) return false;
+      const saved = progress as Record<string, unknown>;
+      const sequenceLength = puzzle.sequence?.length ?? 0;
+      return typeof saved.solved === 'boolean' &&
+        typeof saved.chestClaimed === 'boolean' &&
+        (!saved.chestClaimed || saved.solved === true) &&
+        Array.isArray(saved.sequence) &&
+        saved.sequence.length <= sequenceLength &&
+        saved.sequence.every(index => Number.isInteger(index) && index >= 0 && index < sequenceLength) &&
+        (puzzle.type !== 'push-block' || !!saved.block) &&
+        (saved.block === undefined || (
+          !!saved.block && typeof saved.block === 'object' &&
+          typeof (saved.block as Record<string, unknown>).x === 'number' &&
+          Number.isInteger((saved.block as Record<string, unknown>).x) &&
+          typeof (saved.block as Record<string, unknown>).y === 'number' &&
+          Number.isInteger((saved.block as Record<string, unknown>).y) &&
+          (saved.block as Point).x >= 0 && (saved.block as Point).x < map.width &&
+          (saved.block as Point).y >= 0 && (saved.block as Point).y < map.height
+        ));
+    });
+  });
+}
 
 export class GameEngine {
   public canvas: HTMLCanvasElement;
@@ -117,6 +151,9 @@ export class GameEngine {
   private kingConfrontationTimer: number | null = null;
   private enemyDropListener: EventListener | null = null;
   private readonly saveAfterDialogue = () => this.autoSave();
+  private readonly runtimeMaps: Record<string, MapData> = {};
+  private savedPuzzleProgress: Record<string, Record<string, PuzzleProgress>> = {};
+  private readonly trapCooldowns: Record<string, number> = {};
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -309,6 +346,24 @@ export class GameEngine {
         if (this.nearbyInteractable.type === 'door' && this.nearbyInteractable.door) {
           const door = this.nearbyInteractable.door;
           this.changeMapWithTransition(door.targetMap, door.targetX, door.targetY, door.targetFacing);
+        } else if (this.nearbyInteractable.type === 'puzzle-lever' && this.nearbyInteractable.puzzleId !== undefined &&
+          this.nearbyInteractable.elementIndex !== undefined) {
+          const puzzle = this.currentMapData.puzzles?.find(entry => entry.id === this.nearbyInteractable?.puzzleId);
+          if (puzzle) this.advancePuzzleSequence(puzzle, this.nearbyInteractable.elementIndex);
+        } else if (this.nearbyInteractable.type === 'puzzle-chest' && this.nearbyInteractable.puzzleId !== undefined) {
+          const puzzle = this.currentMapData.puzzles?.find(entry => entry.id === this.nearbyInteractable?.puzzleId);
+          if (puzzle) {
+            const progress = getPuzzleProgress(this.currentMapData, puzzle);
+            if (progress.solved && !progress.chestClaimed) {
+              progress.chestClaimed = true;
+              this.player.coins += puzzle.rewardCoins;
+              this.spawnParticles(puzzle.chest.x * TILE_SIZE + 8, puzzle.chest.y * TILE_SIZE + 8, 8, '#facc15', 'spark');
+              audioManager.playItemGet();
+              this.autoSave();
+            }
+          }
+        } else if (this.nearbyInteractable.type === 'puzzle-target' || this.nearbyInteractable.type === 'puzzle-block') {
+          return;
         } else {
           if (this.nearbyInteractable.type === 'npc' && this.nearbyInteractable.entity) {
             this.nearbyInteractable.entity.turnToward(this.player.x + 6, this.player.y + 5);
@@ -317,7 +372,11 @@ export class GameEngine {
         }
       }
     } else if (type === 'attack') {
-      if (!this.player.hasSword && this.nearbyInteractable) {
+      if (this.nearbyInteractable?.type === 'puzzle-target') {
+        if (this.player.hasSword) {
+          this.player.attack(this.enemies, this.boss, undefined, bounds => this.handlePuzzleAttack(bounds));
+        }
+      } else if (!this.player.hasSword && this.nearbyInteractable) {
         dialogueManager.handleInteraction(this.nearbyInteractable, this.player, () => this.autoSave());
       } else {
         this.cutGrassInFront();
@@ -331,11 +390,101 @@ export class GameEngine {
     }
   }
 
+  private advancePuzzleSequence(puzzle: PuzzleDefinition, elementIndex: number) {
+    const sequence = puzzle.sequence;
+    if (!sequence?.length) return;
+    const progress = getPuzzleProgress(this.currentMapData, puzzle);
+    if (progress.solved) return;
+    if (sequence[progress.sequence.length] !== elementIndex) {
+      progress.sequence = [];
+      this.spawnDamageText(this.player.x + 6, this.player.y - 4, 'RESET', '#f87171');
+      this.autoSave();
+      return;
+    }
+    progress.sequence.push(elementIndex);
+    this.spawnParticles(this.player.x + 6, this.player.y + 5, 3, '#4ade80', 'spark');
+    if (progress.sequence.length === sequence.length) {
+      completePuzzle(this.currentMapData, puzzle, progress);
+      const gate = puzzle.gates[0];
+      if (gate) this.spawnParticles(gate.x * TILE_SIZE + 8, gate.y * TILE_SIZE + 8, 12, '#facc15', 'spark');
+    }
+    this.autoSave();
+  }
+
+  private handlePuzzleAttack(bounds: Bounds) {
+    for (const puzzle of this.currentMapData.puzzles || []) {
+      if (puzzle.type !== 'target-sequence' || !puzzle.targets) continue;
+      if (getPuzzleProgress(this.currentMapData, puzzle).solved) continue;
+      const targetIndex = puzzle.targets.findIndex(target =>
+        bounds.x < (target.x + 1) * TILE_SIZE &&
+        bounds.x + bounds.w > target.x * TILE_SIZE &&
+        bounds.y < (target.y + 1) * TILE_SIZE &&
+        bounds.y + bounds.h > target.y * TILE_SIZE
+      );
+      if (targetIndex >= 0) {
+        this.advancePuzzleSequence(puzzle, targetIndex);
+        return;
+      }
+    }
+  }
+
+  private checkPuzzleTraps() {
+    for (const key of Object.keys(this.trapCooldowns)) {
+      if (this.trapCooldowns[key] > 0) this.trapCooldowns[key]--;
+    }
+    const tileX = Math.floor((this.player.x + 6) / TILE_SIZE);
+    const tileY = Math.floor((this.player.y + 5) / TILE_SIZE);
+    for (const puzzle of this.currentMapData.puzzles || []) {
+      const progress = getPuzzleProgress(this.currentMapData, puzzle);
+      if (progress.solved || !puzzle.traps?.some(trap => trap.x === tileX && trap.y === tileY)) continue;
+      const key = `${this.currentMapId}:${puzzle.id}`;
+      const cooldown = this.trapCooldowns[key] ?? 0;
+      if (cooldown > 0) continue;
+      this.trapCooldowns[key] = 45;
+      this.player.takeDamage(1, tileX * TILE_SIZE + 8, tileY * TILE_SIZE + 8, (x, y) => {
+        this.spawnParticles(x, y, 4, '#93c5fd', 'spark');
+      });
+      this.screenShake = Math.max(this.screenShake, 2);
+      this.spawnParticles(tileX * TILE_SIZE + 8, tileY * TILE_SIZE + 8, 5, '#f87171', 'spark');
+      this.autoSave();
+    }
+  }
+
   public loadMap(mapId: string, targetX: number, targetY: number, targetFacing: Direction = DIR_DOWN) {
-    const mapData = WORLD_MAPS[mapId];
-    if (!mapData) {
+    const sourceMap = WORLD_MAPS[mapId];
+    if (!sourceMap) {
       console.error(`Cannot load unknown map "${mapId}".`);
       return;
+    }
+    let mapData = this.runtimeMaps[mapId];
+    if (!mapData) {
+      const savedProgress = this.savedPuzzleProgress[mapId] || {};
+      mapData = {
+        ...sourceMap,
+        layout: [...sourceMap.layout],
+        puzzles: sourceMap.puzzles?.map(puzzle => ({
+          ...puzzle,
+          levers: puzzle.levers?.map(point => ({ ...point })),
+          targets: puzzle.targets?.map(point => ({ ...point })),
+          sequence: puzzle.sequence ? [...puzzle.sequence] : undefined,
+          block: puzzle.block ? { ...puzzle.block } : undefined,
+          plate: puzzle.plate ? { ...puzzle.plate } : undefined,
+          barriers: puzzle.barriers.map(point => ({ ...point })),
+          gates: puzzle.gates.map(point => ({ ...point })),
+          secrets: puzzle.secrets?.map(point => ({ ...point })),
+          traps: puzzle.traps?.map(point => ({ ...point })),
+          chest: { ...puzzle.chest }
+        })),
+        puzzleProgress: Object.fromEntries(Object.entries(savedProgress).map(([id, progress]) => [
+          id,
+          { ...progress, sequence: [...progress.sequence], block: progress.block ? { ...progress.block } : undefined }
+        ]))
+      };
+      for (const puzzle of mapData.puzzles || []) {
+        if (getPuzzleProgress(mapData, puzzle).solved) completePuzzle(mapData, puzzle);
+        else sealPuzzleBarriers(mapData, puzzle);
+      }
+      this.runtimeMaps[mapId] = mapData;
     }
     this.clearKingConfrontationTimer();
 
@@ -551,7 +700,8 @@ export class GameEngine {
     // Pass this.npcs to checkNearbyInteraction
     this.player.update(this.keys, this.currentMapData, this.npcs, interactable => {
       this.nearbyInteractable = interactable;
-    });
+    }, undefined, () => this.autoSave());
+    this.checkPuzzleTraps();
 
     for (const enemy of this.enemies) {
       enemy.update(this.player, (x, y) => {
@@ -729,6 +879,9 @@ export class GameEngine {
     dialogueManager.syncQuestLog();
 
     this.removeSavedGame();
+    this.savedPuzzleProgress = {};
+    for (const mapId of Object.keys(this.runtimeMaps)) delete this.runtimeMaps[mapId];
+    for (const key of Object.keys(this.trapCooldowns)) delete this.trapCooldowns[key];
     this.loadMap('village', 8 * 16 + WORLD_MAP_OFFSET, 7 * 16 + WORLD_MAP_OFFSET, DIR_DOWN);
   }
 
@@ -760,7 +913,8 @@ export class GameEngine {
         hasRoyalDecree: this.player.hasRoyalDecree,
         swordDamage: this.player.swordDamage,
         questState: dialogueManager.questState,
-        playerHasIronOre: window.playerHasIronOre
+        playerHasIronOre: window.playerHasIronOre,
+        puzzleProgress: this.getSavedPuzzleProgress()
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (error) {
@@ -784,6 +938,7 @@ export class GameEngine {
         throw new Error('The saved game has an unsupported or invalid format.');
       }
       const data = savedData;
+      this.savedPuzzleProgress = data.puzzleProgress ?? {};
       this.player.hearts = Math.min(this.player.maxHearts, Math.max(1, data.hearts ?? this.player.maxHearts));
       this.player.applyInventory({
         hasSword: data.hasSword === true,
@@ -814,6 +969,23 @@ export class GameEngine {
     }
   }
 
+  private getSavedPuzzleProgress(): Record<string, Record<string, PuzzleProgress>> {
+    const saved: Record<string, Record<string, PuzzleProgress>> = {};
+    for (const [mapId, mapData] of Object.entries(this.runtimeMaps)) {
+      const mapProgress: Record<string, PuzzleProgress> = {};
+      for (const puzzle of mapData.puzzles || []) {
+        const progress = getPuzzleProgress(mapData, puzzle);
+        mapProgress[puzzle.id] = {
+          ...progress,
+          sequence: [...progress.sequence],
+          block: progress.block ? { ...progress.block } : undefined
+        };
+      }
+      saved[mapId] = mapProgress;
+    }
+    return saved;
+  }
+
   public render() {
     this.ctx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     this.ctx.save();
@@ -822,6 +994,7 @@ export class GameEngine {
     this.ctx.translate(-this.camera.x + shakeX, -this.camera.y + shakeY);
 
     this.renderMapTiles();
+    this.renderPuzzleProps();
 
     if (this.currentMapData.altar) {
       const a = this.currentMapData.altar;
@@ -1000,6 +1173,88 @@ export class GameEngine {
     }
   }
 
+  private renderPuzzleProps() {
+    for (const puzzle of this.currentMapData.puzzles || []) {
+      const progress = getPuzzleProgress(this.currentMapData, puzzle);
+      const cell = (point: Point) => ({ x: point.x * TILE_SIZE, y: point.y * TILE_SIZE });
+      if (!progress.solved) {
+        for (const gate of puzzle.gates) {
+          const { x, y } = cell(gate);
+          this.ctx.fillStyle = '#38291f';
+          this.ctx.fillRect(x + 2, y + 1, 12, 14);
+          this.ctx.fillStyle = '#c49a54';
+          this.ctx.fillRect(x + 4, y + 2, 2, 12);
+          this.ctx.fillRect(x + 9, y + 2, 2, 12);
+          this.ctx.fillRect(x + 3, y + 5, 10, 2);
+          this.ctx.fillRect(x + 3, y + 10, 10, 2);
+        }
+        for (const trap of puzzle.traps || []) {
+          const { x, y } = cell(trap);
+          this.ctx.fillStyle = '#7f1d1d';
+          this.ctx.fillRect(x + 2, y + 11, 12, 3);
+          this.ctx.fillStyle = '#ef4444';
+          for (let spike = 0; spike < 3; spike++) {
+            this.ctx.fillRect(x + 4 + spike * 4, y + 8, 2, 4);
+          }
+        }
+      }
+
+      for (let index = 0; index < (puzzle.levers || []).length; index++) {
+        const lever = puzzle.levers?.[index];
+        if (!lever) continue;
+        const { x, y } = cell(lever);
+        const activated = progress.sequence.includes(index);
+        this.ctx.fillStyle = '#49331f';
+        this.ctx.fillRect(x + 4, y + 10, 8, 4);
+        this.ctx.fillStyle = activated ? '#4ade80' : '#c49a54';
+        this.ctx.fillRect(x + 7, y + 4, 2, 7);
+        this.ctx.fillRect(x + 5, y + 3, 5, 2);
+      }
+
+      for (let index = 0; index < (puzzle.targets || []).length; index++) {
+        const target = puzzle.targets?.[index];
+        if (!target) continue;
+        const { x, y } = cell(target);
+        const activated = progress.solved || progress.sequence.includes(index);
+        this.ctx.fillStyle = '#5b211e';
+        this.ctx.fillRect(x + 3, y + 3, 10, 10);
+        this.ctx.fillStyle = activated ? '#4ade80' : '#ef4444';
+        this.ctx.fillRect(x + 6, y + 6, 4, 4);
+        this.ctx.fillStyle = '#fde68a';
+        this.ctx.fillRect(x + 7, y + 4, 2, 8);
+        this.ctx.fillRect(x + 4, y + 7, 8, 2);
+      }
+
+      if (puzzle.plate) {
+        const { x, y } = cell(puzzle.plate);
+        this.ctx.fillStyle = progress.solved ? '#4ade80' : '#8b6b35';
+        this.ctx.fillRect(x + 2, y + 12, 12, 2);
+        this.ctx.fillRect(x + 3, y + 10, 10, 2);
+      }
+
+      if (progress.block) {
+        const { x, y } = cell(progress.block);
+        this.ctx.fillStyle = '#50351f';
+        this.ctx.fillRect(x + 1, y + 2, 14, 13);
+        this.ctx.fillStyle = '#a8753c';
+        this.ctx.fillRect(x + 3, y + 4, 10, 9);
+        this.ctx.fillStyle = '#e0b56d';
+        this.ctx.fillRect(x + 5, y + 6, 6, 2);
+        this.ctx.fillRect(x + 5, y + 10, 6, 1);
+      }
+
+      if (progress.solved) {
+        const { x, y } = cell(puzzle.chest);
+        this.ctx.fillStyle = progress.chestClaimed ? '#6b4d2d' : '#8a4b20';
+        this.ctx.fillRect(x + 2, y + 7, 12, 7);
+        this.ctx.fillStyle = progress.chestClaimed ? '#9a713e' : '#d7a643';
+        this.ctx.fillRect(x + 2, y + 5, 12, 4);
+        this.ctx.fillStyle = '#f5d477';
+        this.ctx.fillRect(x + 7, y + 8, 2, 3);
+      }
+    }
+  }
+
   private getTerrainTheme(): 'pastoral' | 'woodland' | 'road' | 'town' | 'riverTown' | 'market' | 'cathedral' | 'vineyardTown' | 'royal' {
     const mapId = this.currentMapId;
     if (mapId === 'forest') return 'woodland';
@@ -1110,6 +1365,14 @@ export class GameEngine {
       const by = Math.max(13, spriteTop - 13);
       const prompt = this.nearbyInteractable.type === 'door'
         ? 'E ENTER'
+        : this.nearbyInteractable.type === 'puzzle-lever'
+          ? 'E PULL'
+          : this.nearbyInteractable.type === 'puzzle-target'
+            ? 'ATTACK'
+            : this.nearbyInteractable.type === 'puzzle-block'
+              ? 'PUSH'
+            : this.nearbyInteractable.type === 'puzzle-chest'
+              ? 'E OPEN'
         : this.nearbyInteractable.type === 'altar' && !this.player.hasSword
           ? 'E TAKE'
           : 'E TALK';
@@ -1123,6 +1386,13 @@ export class GameEngine {
       this.ctx.textAlign = 'center';
       this.ctx.fillText(prompt, bx, by + 7);
       this.ctx.textAlign = 'start';
+      if (this.nearbyInteractable.hint) {
+        this.ctx.fillStyle = 'rgba(8, 10, 16, 0.8)';
+        this.ctx.fillRect(2, SCREEN_HEIGHT - 10, SCREEN_WIDTH - 4, 8);
+        this.ctx.fillStyle = '#fff2bd';
+        this.ctx.font = '6px sans-serif';
+        this.ctx.fillText(`Hint: ${this.nearbyInteractable.hint}`, 5, SCREEN_HEIGHT - 4, SCREEN_WIDTH - 10);
+      }
     }
   }
 

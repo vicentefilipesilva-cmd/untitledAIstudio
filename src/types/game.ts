@@ -74,6 +74,30 @@ export interface DoorData {
   targetFacing: Direction;
 }
 
+export interface PuzzleDefinition {
+  id: string;
+  type: 'lever-sequence' | 'push-block' | 'target-sequence';
+  hint: string;
+  levers?: Point[];
+  targets?: Point[];
+  sequence?: number[];
+  block?: Point;
+  plate?: Point;
+  barriers: Point[];
+  gates: Point[];
+  secrets?: Point[];
+  traps?: Point[];
+  chest: Point;
+  rewardCoins: number;
+}
+
+export interface PuzzleProgress {
+  solved: boolean;
+  sequence: number[];
+  block?: Point;
+  chestClaimed: boolean;
+}
+
 export interface MapData {
   id: string;
   name: string;
@@ -87,6 +111,8 @@ export interface MapData {
   npcs: NPCData[];
   enemies: EnemyData[];
   altar?: { x: number; y: number; active: boolean };
+  puzzles?: PuzzleDefinition[];
+  puzzleProgress?: Record<string, PuzzleProgress>;
   bigTrees?: Point[];
   signText?: string;
 }
