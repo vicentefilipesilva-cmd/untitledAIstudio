@@ -45,7 +45,7 @@ export interface NPCData {
 }
 
 export interface EnemyData {
-  type: 'boar' | 'wolf' | 'bandit' | 'corrupt_knight';
+  type: EnemyType;
   x: number;
   y: number;
   patrolAxis?: 'x' | 'y';
@@ -54,6 +54,10 @@ export interface EnemyData {
   isQuestTarget?: string;
   neutralUntilProvoked?: boolean;
 }
+
+export type EnemyType = 'boar' | 'wolf' | 'bandit' | 'corrupt_knight';
+export type BestiaryEntryId = EnemyType | 'king';
+export type BestiaryDefeats = Partial<Record<BestiaryEntryId, number>>;
 
 export interface ExitTrigger {
   trigger: Bounds;
@@ -155,6 +159,8 @@ export interface QuestLogItem {
   reward?: string;
   status?: 'locked' | 'available' | 'active' | 'ready' | 'completed';
   objective?: string;
+  giver: string;
+  discovered?: boolean;
 }
 
 export interface SideQuestProgress {

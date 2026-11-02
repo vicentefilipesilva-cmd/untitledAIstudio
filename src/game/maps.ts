@@ -86,7 +86,7 @@ const createHouseInterior = (
   };
 };
 
-type VenueStyle = 'tavern' | 'bakery' | 'forge' | 'barracks' | 'market' | 'chapel' | 'wine-cellar' | 'castle-guardroom';
+type VenueStyle = 'tavern' | 'bakery' | 'forge' | 'barracks' | 'market' | 'chapel' | 'wine-cellar';
 
 const createVenueInterior = (
   id: string,
@@ -103,7 +103,7 @@ const createVenueInterior = (
     layout[y][x] = tile;
   };
 
-  if (style === 'forge' || style === 'market' || style === 'wine-cellar' || style === 'castle-guardroom') {
+  if (style === 'forge' || style === 'market' || style === 'wine-cellar') {
     for (let y = 1; y < 9; y++) {
       for (let x = 1; x < 11; x++) setTile(x, y, 'C');
     }
@@ -119,7 +119,7 @@ const createVenueInterior = (
     setTile(8, 2, 'Y');
     setTile(2, 2, 'U');
     setTile(9, 3, 'Q');
-  } else if (style === 'barracks' || style === 'castle-guardroom') {
+  } else if (style === 'barracks') {
     setTile(2, 2, 'B');
     setTile(8, 2, 'B');
     setTile(2, 5, 'B');
@@ -743,7 +743,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       "MPPMNNMMK..KMMNNMPPM",
       "MMMMMMMMKVVKMMMMMMMM",
       "CCCCCCCCCVVCCCCCCCCC",
-      "C.E......VV........C",
+      "C.M......VV........C",
       "C........VV........C",
       "C........VV........C",
       "C........VV........C",
@@ -762,9 +762,6 @@ export const WORLD_MAPS: Record<string, MapData> = {
         targetY: 1 * 16 + 4,
         targetFacing: 0
       }
-    ],
-    doors: [
-      { x: 2 * 16, y: 4 * 16, targetMap: 'castle_guardroom', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
     npcs: [],
     enemies: [],
@@ -810,10 +807,6 @@ export const WORLD_MAPS: Record<string, MapData> = {
   dijon_wine_cellar: createVenueInterior('dijon_wine_cellar', 'Dijon Wine Cellar', 'dijon', 16, 3, 'wine-cellar', [
     { id: 'vintner', name: 'Marc le Vigneron', sprite: 'npc_vintner', x: 5 * 16, y: 4 * 16, facing: 3 }
   ]),
-  castle_guardroom: createVenueInterior('castle_guardroom', 'Le Château Noir Guard Chamber', 'capital', 2, 4, 'castle-guardroom', [
-    { id: 'castle_guard_captain', name: 'Captain of the Royal Guard', sprite: 'npc_guard', x: 4 * 16, y: 4 * 16, facing: 3 },
-    { id: 'castle_guard', name: 'Royal Guard', sprite: 'npc_guard', x: 7 * 16, y: 4 * 16, facing: 2 }
-  ])
 };
 
 const EXPANSION_MARGIN = 6;
@@ -928,6 +921,27 @@ const OUTDOOR_RESIDENTS: Record<string, NPCData[]> = {
     y: 17 * TILE_SIZE,
     facing: 2
   }]
+};
+
+const OUTDOOR_CITIZEN_PLACEMENTS: Record<string, Array<{ index: number; x: number; y: number; facing: NPCData['facing'] }>> = {
+  village: [{ index: 0, x: 9, y: 18, facing: 0 }],
+  aiguemorte: [
+    { index: 0, x: 7, y: 18, facing: 0 },
+    { index: 2, x: 24, y: 18, facing: 2 }
+  ],
+  val_de_loire: [
+    { index: 0, x: 7, y: 18, facing: 0 },
+    { index: 1, x: 24, y: 18, facing: 2 }
+  ],
+  orleans: [
+    { index: 0, x: 8, y: 18, facing: 0 },
+    { index: 2, x: 24, y: 18, facing: 2 }
+  ],
+  tours: [
+    { index: 1, x: 8, y: 18, facing: 0 },
+    { index: 2, x: 24, y: 18, facing: 2 }
+  ],
+  dijon: [{ index: 0, x: 8, y: 18, facing: 0 }]
 };
 
 const EXPANDED_MAP_IDS = new Set(['village', 'forest', ...SETTLEMENT_EXPANSIONS.map(settlement => settlement.mapId)]);
@@ -1470,14 +1484,17 @@ for (const settlement of SETTLEMENT_EXPANSIONS) {
   settlement.citizens.forEach(([name, sprite, interiorId], index) => {
     const interior = WORLD_MAPS[interiorId];
     if (!interior) throw new Error(`Missing NPC interior "${interiorId}" for ${settlement.mapId}.`);
-    interior.npcs.push({
+    const outdoorPlacement = OUTDOOR_CITIZEN_PLACEMENTS[settlement.mapId]?.find(placement => placement.index === index);
+    const resident: NPCData = {
       id: `${settlement.mapId}_citizen_${index + 1}`,
       name,
       sprite,
-      x: 5 * 16,
-      y: 6 * 16,
-      facing: 0
-    });
+      x: outdoorPlacement ? outdoorPlacement.x * TILE_SIZE : 5 * TILE_SIZE,
+      y: outdoorPlacement ? outdoorPlacement.y * TILE_SIZE : 6 * TILE_SIZE,
+      facing: outdoorPlacement ? outdoorPlacement.facing : 0
+    };
+    if (outdoorPlacement) map.npcs.push(resident);
+    else interior.npcs.push(resident);
   });
 
   const landmarkX = settlement.mapId === 'village' ? 19 : settlement.mapId === 'dijon' ? 19 : 18;

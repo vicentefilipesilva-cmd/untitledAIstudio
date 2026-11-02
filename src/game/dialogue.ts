@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CityStoryQuestId, CityStoryQuestStatus, DialoguePage, QUEST_STATE, QuestLogItem, QuestStateType, SideQuestProgress } from '../types/game';
+import { BestiaryDefeats, CityStoryQuestId, CityStoryQuestStatus, DialoguePage, EnemyType, QUEST_STATE, QuestLogItem, QuestStateType, SideQuestProgress } from '../types/game';
 import { audioManager } from './audio';
 import { NearbyInteractable, Player } from './entities';
 import { spriteManager } from './sprites';
@@ -105,6 +105,8 @@ export class DialogueSystem {
   public questState: QuestStateType = QUEST_STATE.NOT_STARTED;
   public sideQuestProgress: Record<string, SideQuestProgress> = {};
   public cityStoryQuestProgress: Partial<Record<CityStoryQuestId, CityStoryQuestStatus>> = {};
+  public discoveredQuestIds: string[] = [];
+  public bestiaryDefeats: BestiaryDefeats = {};
   public isOpen = false;
   public pages: DialoguePage[] = [];
   public currentPageIndex = 0;
@@ -129,7 +131,8 @@ export class DialogueSystem {
       location: "Le Hameau d'Oakhaven & Le Bois des Murmures",
       description: "Recover Tobias's straw hat forgotten near the ancient stone altar in the woods.",
       completed: false,
-      reward: 'Wind-Cleaver Legendary Sword'
+      reward: 'Wind-Cleaver Legendary Sword',
+      giver: 'Tobias, village elder'
     },
     {
       id: 'flour_quest',
@@ -138,7 +141,8 @@ export class DialogueSystem {
       location: 'Aiguemorte',
       description: 'Defeat the garrison rogue to recover the confiscated flour bags for Madame Renée and the village orphans.',
       completed: false,
-      reward: 'Route 1 Clearance & Gold Coins'
+      reward: 'Route 1 clearance and gold coins',
+      giver: 'Madame Renée, baker'
     },
     {
       id: 'forge_quest',
@@ -147,7 +151,8 @@ export class DialogueSystem {
       location: 'Val-de-Loire',
       description: 'Clear the bandit hideout on Route 1 to recover Maître Pierre’s stolen high-grade iron ore.',
       completed: false,
-      reward: "Knight's Heater Shield [X] & Honed Blade (Damage 1 -> 2)"
+      reward: "Knight's shield and honed blade",
+      giver: 'Maître Pierre, blacksmith'
     },
     {
       id: 'wine_quest',
@@ -156,7 +161,8 @@ export class DialogueSystem {
       location: "Route 5 & Dijon (La Forêt d'Ombre)",
       description: 'Intercept the royal noble convoy in the dark woods to recover the vintage barrels and discover the King’s seal.',
       completed: false,
-      reward: 'Royal Corruption Decree & Chemin Royal Gate Clearance'
+      reward: 'Royal decree and Royal Road clearance',
+      giver: 'Marc, vintner'
     },
     {
       id: 'final_quest',
@@ -165,7 +171,8 @@ export class DialogueSystem {
       location: 'Le Chemin Royal & Le Château Noir',
       description: 'Advance past the royal guard captains on the highway and defeat tyrant King Raymond IV in his citadel.',
       completed: false,
-      reward: 'Liberation of Aethelgard & Peace'
+      reward: 'Liberation of Aethelgard',
+      giver: 'King Raymond IV'
     },
     {
       id: 'orleans-ledger',
@@ -175,7 +182,8 @@ export class DialogueSystem {
       description: 'Recover the city ledger seized by the corrupt royal knight and return it to the council.',
       completed: false,
       status: 'available',
-      objective: 'Speak with the city representative in the market.'
+      objective: 'Speak with the city representative in the market.',
+      giver: 'Orléans city representative'
     },
     {
       id: 'tours-archive',
@@ -185,7 +193,8 @@ export class DialogueSystem {
       description: 'Recover the chapel archive key from the corrupt knight and reopen the archive.',
       completed: false,
       status: 'available',
-      objective: 'Speak with the scholar in the chapel.'
+      objective: 'Speak with the scholar in the chapel.',
+      giver: 'Tours chapel scholar'
     },
     {
       id: 'whispering-woods-cache',
@@ -196,7 +205,8 @@ export class DialogueSystem {
       completed: false,
       status: 'locked',
       objective: 'Solve the middle-left-right lever sequence and claim the chest beyond the forest gate.',
-      reward: '20 coins + fresh bread (restore 2 hearts)'
+      reward: '20 coins and fresh bread',
+      giver: 'The Oakhaven innkeeper'
     },
     {
       id: 'route-one-lost-cache',
@@ -207,9 +217,14 @@ export class DialogueSystem {
       completed: false,
       status: 'locked',
       objective: 'Push the carved block onto its matching floor plate and claim the chest beyond the Route 1 gate.',
-      reward: '25 coins + a healing herb (restore 1 heart)'
+      reward: '25 coins and a healing herb',
+      giver: 'The road traveler'
     }
   ];
+
+  constructor() {
+    this.syncQuestLog();
+  }
 
   public startDialogue(pages: DialoguePage[], onComplete: (() => void) | null = null) {
     if (!pages || pages.length === 0) return;
@@ -279,22 +294,49 @@ export class DialogueSystem {
   }
 
   public syncQuestLog() {
-    const completionStates = [
-      QUEST_STATE.TALKED_AFTER_SWORD,
-      QUEST_STATE.ORPHAN_FLOUR_RESOLVED,
-      QUEST_STATE.HAS_SHIELD_AND_UPGRADE,
-      QUEST_STATE.HAS_ROYAL_DECREE_PROOF,
-      QUEST_STATE.VICTORY_LIBERATION
-    ];
-    this.questLog.forEach((quest, index) => {
-      if (index < completionStates.length) {
-        quest.completed = this.questState >= completionStates[index];
+    const mainQuestStates: Record<string, { startedAt: QuestStateType; completedAt: QuestStateType; objective: string }> = {
+      hat_quest: {
+        startedAt: QUEST_STATE.SEARCHING_HAT,
+        completedAt: QUEST_STATE.TALKED_AFTER_SWORD,
+        objective: 'Find Tobias’s straw hat at the ancient forest altar and return it to him.'
+      },
+      flour_quest: {
+        startedAt: QUEST_STATE.ORPHAN_FLOUR_QUEST,
+        completedAt: QUEST_STATE.ORPHAN_FLOUR_RESOLVED,
+        objective: 'Recover the flour from the garrison rogue and return it to Madame Renée.'
+      },
+      forge_quest: {
+        startedAt: QUEST_STATE.FORGE_LEDGER_QUEST,
+        completedAt: QUEST_STATE.HAS_SHIELD_AND_UPGRADE,
+        objective: 'Recover the stolen iron ore on Route 1 and bring it to Maître Pierre.'
+      },
+      wine_quest: {
+        startedAt: QUEST_STATE.WINE_TRAIL_REVEAL_QUEST,
+        completedAt: QUEST_STATE.HAS_ROYAL_DECREE_PROOF,
+        objective: 'Find the noble convoy, recover the royal decree, and report back to Marc.'
+      },
+      final_quest: {
+        startedAt: QUEST_STATE.CAMINHO_REAL_CONFRONTATION,
+        completedAt: QUEST_STATE.VICTORY_LIBERATION,
+        objective: 'Defeat King Raymond IV and end his tyrannical rule.'
+      }
+    };
+
+    this.questLog.forEach(quest => {
+      const mainQuest = mainQuestStates[quest.id];
+      if (mainQuest) {
+        const discovered = this.discoveredQuestIds.includes(quest.id) || this.questState >= mainQuest.startedAt;
+        quest.discovered = discovered;
+        quest.completed = this.questState >= mainQuest.completedAt;
+        quest.status = !discovered ? 'locked' : quest.completed ? 'completed' : 'active';
+        quest.objective = mainQuest.objective;
         return;
       }
       const cityQuest = CITY_STORY_QUESTS.find(entry => entry.id === quest.id);
       if (cityQuest) {
         const status = this.cityStoryQuestProgress[cityQuest.id];
-        quest.status = status ?? 'available';
+        quest.discovered = status !== undefined;
+        quest.status = status ?? 'locked';
         quest.completed = status === 'completed';
         quest.objective = status === 'active'
           ? cityQuest.objective
@@ -308,8 +350,8 @@ export class DialogueSystem {
       const definition = SIDE_QUESTS.find(entry => entry.id === quest.id);
       if (!definition) return;
       const progress = this.sideQuestProgress[quest.id];
-      const unlocked = this.questState >= definition.unlockAt;
-      quest.status = progress?.status ?? (unlocked ? 'available' : 'locked');
+      quest.discovered = progress !== undefined;
+      quest.status = progress?.status ?? 'locked';
       quest.completed = progress?.status === 'completed';
       const hintText = progress?.status === 'active' ? ` Hint: ${definition.hint}` : '';
       quest.objective = progress?.status === 'ready'
@@ -318,6 +360,32 @@ export class DialogueSystem {
           ? 'Cache found; reward claimed.'
           : `${definition.objective}${hintText}`;
     });
+  }
+
+  public discoverQuest(id: string) {
+    if (!this.questLog.some(quest => quest.id === id)) return;
+    if (!this.discoveredQuestIds.includes(id)) this.discoveredQuestIds.push(id);
+    this.syncQuestLog();
+  }
+
+  public isValidDiscoveredQuestIds(value: unknown): value is string[] | undefined {
+    if (value === undefined) return true;
+    return Array.isArray(value) &&
+      value.every(id => typeof id === 'string' && this.questLog.some(quest => quest.id === id)) &&
+      new Set(value).size === value.length;
+  }
+
+  public recordBestiaryDefeat(type: EnemyType | 'king') {
+    this.bestiaryDefeats[type] = (this.bestiaryDefeats[type] ?? 0) + 1;
+  }
+
+  public isValidBestiaryDefeats(value: unknown): value is BestiaryDefeats | undefined {
+    if (value === undefined) return true;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const validIds = new Set(['boar', 'wolf', 'bandit', 'corrupt_knight', 'king']);
+    return Object.entries(value).every(([id, count]) =>
+      validIds.has(id) && typeof count === 'number' && Number.isSafeInteger(count) && count >= 0
+    );
   }
 
   public isValidSideQuestProgress(value: unknown): value is Record<string, SideQuestProgress> | undefined {
@@ -347,8 +415,10 @@ export class DialogueSystem {
     return true;
   }
 
-  public resetCityStoryQuests() {
+  public resetJournalProgress() {
     this.cityStoryQuestProgress = {};
+    this.discoveredQuestIds = [];
+    this.bestiaryDefeats = {};
     this.syncQuestLog();
   }
 
@@ -575,11 +645,6 @@ export class DialogueSystem {
           speaker: npc.name,
           text: 'The vines are thriving this season. I keep an eye on them here before carrying the harvest down to the cellar.'
         }]);
-      } else if (npc.id === 'castle_guard_captain' || npc.id === 'castle_guard') {
-        this.startDialogue([{
-          speaker: npc.name,
-          text: 'This chamber is part of the royal guard post. Keep your weapon ready; the throne room lies through the western door.'
-        }]);
       } else if (npc.id === 'cottage_resident') {
         this.startDialogue([{ speaker: npc.name, text: "I mend cloaks for the villagers. The roads are safer when neighbors look after one another." }]);
       } else if (npc.id === 'cottage_child') {
@@ -615,6 +680,7 @@ export class DialogueSystem {
     if (!status) {
       this.startDialogue([{ speaker, text: quest.offer }], () => {
         this.cityStoryQuestProgress[quest.id] = 'active';
+        this.discoverQuest(quest.id);
         this.syncQuestLog();
         onSave?.();
       });
@@ -651,6 +717,7 @@ export class DialogueSystem {
         this.sideQuestProgress[quest.id] = {
           status: this.claimedPuzzleIds.has(quest.puzzleId) ? 'ready' : 'active'
         };
+        this.discoverQuest(quest.id);
         this.syncQuestLog();
       });
       return true;
@@ -727,6 +794,7 @@ export class DialogueSystem {
         ],
         () => {
           this.questState = QUEST_STATE.SEARCHING_HAT;
+          this.discoverQuest('hat_quest');
         }
       );
     } else if (this.questState === QUEST_STATE.SEARCHING_HAT) {
@@ -797,6 +865,7 @@ export class DialogueSystem {
         ],
         () => {
           this.questState = QUEST_STATE.ORPHAN_FLOUR_QUEST;
+          this.discoverQuest('flour_quest');
         }
       );
     } else if (player.hasFlour && this.questState === QUEST_STATE.ORPHAN_FLOUR_QUEST) {
@@ -843,6 +912,7 @@ export class DialogueSystem {
         ],
         () => {
           this.questState = QUEST_STATE.FORGE_LEDGER_QUEST;
+          this.discoverQuest('forge_quest');
         }
       );
     } else if (player.hasWhetstone || this.questState >= QUEST_STATE.HAS_SHIELD_AND_UPGRADE) {
@@ -882,6 +952,7 @@ export class DialogueSystem {
         ],
         () => {
           this.questState = QUEST_STATE.WINE_TRAIL_REVEAL_QUEST;
+          this.discoverQuest('wine_quest');
         }
       );
     } else if (player.hasRoyalDecree) {
@@ -922,6 +993,7 @@ export class DialogueSystem {
       ],
       () => {
         this.questState = QUEST_STATE.CONFRONTING_KING;
+        this.discoverQuest('final_quest');
         onStartBattle();
       }
     );
@@ -938,6 +1010,7 @@ export class DialogueSystem {
       () => {
         this.questState = QUEST_STATE.VICTORY_LIBERATION;
         this.questLog[4].completed = true;
+        this.syncQuestLog();
         audioManager.playVictory();
         onVictoryScreen();
       }

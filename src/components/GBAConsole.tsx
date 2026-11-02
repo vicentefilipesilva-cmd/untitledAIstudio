@@ -11,8 +11,10 @@ interface GBAConsoleProps {
   scanlinesActive: boolean;
   isFullscreen: boolean;
   isOverlayOpen: boolean;
+  isJournalOpen: boolean;
   onToggleFullscreen: () => void;
   onOpenJournal: () => void;
+  onSwitchJournalTab: (direction: 'left' | 'right') => void;
   onOpenMap: () => void;
 }
 
@@ -21,20 +23,26 @@ export const GBAConsole: React.FC<GBAConsoleProps> = ({
   scanlinesActive,
   isFullscreen,
   isOverlayOpen,
+  isJournalOpen,
   onToggleFullscreen,
   onOpenJournal,
+  onSwitchJournalTab,
   onOpenMap
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const onOpenJournalRef = useRef(onOpenJournal);
   const onOpenMapRef = useRef(onOpenMap);
   const isOverlayOpenRef = useRef(isOverlayOpen);
+  const isJournalOpenRef = useRef(isJournalOpen);
+  const onSwitchJournalTabRef = useRef(onSwitchJournalTab);
 
   useEffect(() => {
     onOpenJournalRef.current = onOpenJournal;
     onOpenMapRef.current = onOpenMap;
     isOverlayOpenRef.current = isOverlayOpen;
-  }, [isOverlayOpen, onOpenJournal, onOpenMap]);
+    isJournalOpenRef.current = isJournalOpen;
+    onSwitchJournalTabRef.current = onSwitchJournalTab;
+  }, [isOverlayOpen, isJournalOpen, onOpenJournal, onOpenMap, onSwitchJournalTab]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -54,6 +62,11 @@ export const GBAConsole: React.FC<GBAConsoleProps> = ({
       if (e.key === 'Tab' || lower === 'j') {
         e.preventDefault();
         if (!e.repeat) onOpenJournalRef.current();
+        return;
+      }
+      if (isJournalOpenRef.current && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        if (!e.repeat) onSwitchJournalTabRef.current(e.key === 'ArrowLeft' ? 'left' : 'right');
         return;
       }
       if (lower === 'm' && !engine.isGameOver) {
@@ -125,7 +138,7 @@ export const GBAConsole: React.FC<GBAConsoleProps> = ({
       </div>
       {!isFullscreen && (
         <p className="game-controls-hint">
-          Move: WASD / arrows <span>·</span> Interact: E / Enter <span>·</span> Attack: Space / Z <span>·</span> Fullscreen: button above
+          Move: WASD / arrows <span>·</span> Interact: E / Enter <span>·</span> Attack: Space / Z <span>·</span> Journal: J / Tab <span>·</span> Fullscreen: button above
         </p>
       )}
     </section>

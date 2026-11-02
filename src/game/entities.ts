@@ -896,7 +896,6 @@ export class BossKing extends Entity {
   public hp = 24;
   public isDead = false;
   public hurtTimer = 0;
-  public attackCooldown = 0;
   public actionTimer = 70;
   public animTimer = 0;
   public animFrame = 0;
@@ -909,14 +908,23 @@ export class BossKing extends Entity {
   public update(player: Player, mapData: MapData, onDefeated: () => void, onBlock?: (x: number, y: number) => void) {
     if (this.isDead) return;
     if (this.hurtTimer > 0) this.hurtTimer--;
-    if (this.attackCooldown > 0) this.attackCooldown--;
 
     const phase = this.hp <= this.maxHp / 2 ? 2 : 1;
     const speed = phase === 2 ? 0.85 : 0.55;
-    const angle = Math.atan2(player.y + 5 - (this.y + 8), player.x + 6 - (this.x + 8));
+    const dx = player.x + player.width / 2 - (this.x + this.width / 2);
+    const dy = player.y + player.height / 2 - (this.y + this.height / 2);
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    const minimumRange = 96;
+    const maximumRange = 120;
 
-    this.x += Math.cos(angle) * speed;
-    this.y += Math.sin(angle) * speed;
+    if (distance < minimumRange) {
+      this.x -= Math.cos(angle) * speed;
+      this.y -= Math.sin(angle) * speed;
+    } else if (distance > maximumRange) {
+      this.x += Math.cos(angle) * speed;
+      this.y += Math.sin(angle) * speed;
+    }
     this.x = Math.max(TILE_SIZE, Math.min(mapData.width * TILE_SIZE - this.width - TILE_SIZE, this.x));
     this.y = Math.max(TILE_SIZE * 2, Math.min(mapData.height * TILE_SIZE - this.height - TILE_SIZE, this.y));
 
@@ -924,12 +932,6 @@ export class BossKing extends Entity {
     if (this.animTimer >= 1) {
       this.animTimer = 0;
       this.animFrame = (this.animFrame + 1) % 3;
-    }
-
-    if (this.collidesWith(player.getBounds()) && this.attackCooldown <= 0) {
-      player.takeDamage(phase === 2 ? 2 : 1, this.x + 8, this.y + 8, onBlock);
-      this.attackCooldown = 50;
-      this.animFrame = 1;
     }
 
     this.actionTimer--;

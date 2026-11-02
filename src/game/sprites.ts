@@ -473,7 +473,7 @@ export class SpriteManager {
       };
       const downFrames = animationColumns.map(x => crop(x, rowOffsets.down));
       const upFrames = animationColumns.map(x => crop(x, rowOffsets.up));
-      const leftFrames = animationColumns.map(x => crop(x, rowOffsets.right));
+      const leftFrames = animationColumns.map(x => crop(x, rowOffsets.left));
       const rightFrames = leftFrames.map(mirror);
       const directionFrames = {
         down: downFrames,

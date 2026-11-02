@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Bounds, CityStoryQuestId, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, SideQuestProgress, TILE_SIZE } from '../types/game';
+import { BestiaryDefeats, Bounds, CityStoryQuestId, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, SideQuestProgress, TILE_SIZE } from '../types/game';
 import { audioManager } from './audio';
 import { dialogueManager } from './dialogue';
 import { BossKing, Enemy, NearbyInteractable, NPC, Pickup, Player, PlayerInventory } from './entities';
@@ -37,6 +37,8 @@ interface GameSaveData {
   puzzleProgress?: Record<string, Record<string, PuzzleProgress>>;
   sideQuestProgress?: Record<string, SideQuestProgress>;
   cityStoryQuestProgress?: Record<CityStoryQuestId, 'active' | 'ready' | 'completed'>;
+  discoveredQuestIds?: string[];
+  bestiaryDefeats?: BestiaryDefeats;
 }
 
 const isGameSaveData = (value: unknown): value is GameSaveData => {
@@ -67,6 +69,8 @@ const isGameSaveData = (value: unknown): value is GameSaveData => {
     booleanFields.every(field => data[field] === undefined || typeof data[field] === 'boolean') &&
     dialogueManager.isValidSideQuestProgress(data.sideQuestProgress) &&
     dialogueManager.isValidCityStoryQuestProgress(data.cityStoryQuestProgress) &&
+    dialogueManager.isValidDiscoveredQuestIds(data.discoveredQuestIds) &&
+    dialogueManager.isValidBestiaryDefeats(data.bestiaryDefeats) &&
     isSavedPuzzleProgress(data.puzzleProgress);
 };
 
@@ -161,6 +165,7 @@ export class GameEngine {
   private readonly runtimeMaps: Record<string, MapData> = {};
   private savedPuzzleProgress: Record<string, Record<string, PuzzleProgress>> = {};
   private readonly trapCooldowns: Record<string, number> = {};
+  private readonly processedEnemyDefeats = new WeakSet<Enemy>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -565,6 +570,8 @@ export class GameEngine {
 
   public triggerKingDefeated() {
     this.bossActive = false;
+    dialogueManager.recordBestiaryDefeat('king');
+    this.autoSave();
     audioManager.stopMusic();
     dialogueManager.triggerVictoryEpilogue(() => {
       this.isVictory = true;
@@ -738,6 +745,11 @@ export class GameEngine {
         this.screenShake = Math.max(this.screenShake, 2);
         this.spawnParticles(x, y, 4, '#93c5fd', 'spark');
       });
+      if (enemy.isDead && !this.processedEnemyDefeats.has(enemy)) {
+        this.processedEnemyDefeats.add(enemy);
+        dialogueManager.recordBestiaryDefeat(enemy.type);
+        this.autoSave();
+      }
       // Quest drops check
       if (enemy.isDead && enemy.isQuestTarget) {
         if (enemy.isQuestTarget === 'flour_bandit' && !this.player.hasFlour) {
@@ -917,7 +929,7 @@ export class GameEngine {
     window.playerHasIronOre = false;
     dialogueManager.questState = QUEST_STATE.NOT_STARTED;
     dialogueManager.resetSideQuests();
-    dialogueManager.resetCityStoryQuests();
+    dialogueManager.resetJournalProgress();
     dialogueManager.syncQuestLog();
 
     this.removeSavedGame();
@@ -957,6 +969,8 @@ export class GameEngine {
         questState: dialogueManager.questState,
         sideQuestProgress: dialogueManager.sideQuestProgress,
         cityStoryQuestProgress: dialogueManager.cityStoryQuestProgress,
+        discoveredQuestIds: dialogueManager.discoveredQuestIds,
+        bestiaryDefeats: dialogueManager.bestiaryDefeats,
         playerHasIronOre: window.playerHasIronOre,
         puzzleProgress: this.getSavedPuzzleProgress()
       };
@@ -977,7 +991,18 @@ export class GameEngine {
     if (!raw) return false;
 
     try {
-      const savedData: unknown = JSON.parse(raw);
+      const parsedData: unknown = JSON.parse(raw);
+      const savedData = parsedData && typeof parsedData === 'object' &&
+        !Array.isArray(parsedData) &&
+        (parsedData as Record<string, unknown>).mapId === 'castle_guardroom'
+        ? {
+          ...(parsedData as Record<string, unknown>),
+          mapId: 'capital',
+          x: 3 * TILE_SIZE,
+          y: 4 * TILE_SIZE,
+          facing: DIR_DOWN
+        }
+        : parsedData;
       if (!isGameSaveData(savedData)) {
         throw new Error('The saved game has an unsupported or invalid format.');
       }
@@ -999,6 +1024,8 @@ export class GameEngine {
       dialogueManager.questState = data.questState ?? QUEST_STATE.NOT_STARTED;
       dialogueManager.sideQuestProgress = data.sideQuestProgress ?? {};
       dialogueManager.cityStoryQuestProgress = data.cityStoryQuestProgress ?? {};
+      dialogueManager.discoveredQuestIds = data.discoveredQuestIds ?? [];
+      dialogueManager.bestiaryDefeats = data.bestiaryDefeats ?? {};
       dialogueManager.syncQuestLog();
       window.playerHasIronOre = data.playerHasIronOre === true;
       this.syncEquipmentFromQuestProgress();

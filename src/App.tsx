@@ -16,6 +16,7 @@ export default function App() {
   const [musicOn, setMusicOn] = useState(true);
   const [scanlinesActive, setScanlinesActive] = useState(true);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [journalTab, setJournalTab] = useState<'quests' | 'bestiary'>('quests');
   const [mapOpen, setMapOpen] = useState(false);
   const [hasMap, setHasMap] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -181,6 +182,12 @@ export default function App() {
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
           onOpenJournal={toggleJournal}
+          isJournalOpen={journalOpen}
+          onSwitchJournalTab={direction => {
+            setJournalTab(current => direction === 'right'
+              ? current === 'quests' ? 'bestiary' : 'quests'
+              : current === 'bestiary' ? 'quests' : 'bestiary');
+          }}
           onOpenMap={toggleMap}
           isOverlayOpen={journalOpen || mapOpen}
         />
@@ -312,6 +319,8 @@ export default function App() {
         isOpen={journalOpen}
         onClose={() => setJournalOpen(false)}
         engine={engineRef.current}
+        activeTab={journalTab}
+        onSwitchTab={setJournalTab}
       />
 
       <MapBlueprintModal
