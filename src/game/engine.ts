@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Bounds, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE } from '../types/game';
+import { Bounds, Direction, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_UP, MapData, Point, PuzzleDefinition, PuzzleProgress, QUEST_STATE, QuestStateType, SCREEN_HEIGHT, SCREEN_WIDTH, SideQuestProgress, TILE_SIZE } from '../types/game';
 import { audioManager } from './audio';
 import { dialogueManager } from './dialogue';
 import { BossKing, Enemy, NearbyInteractable, NPC, Pickup, Player, PlayerInventory } from './entities';
@@ -35,6 +35,7 @@ interface GameSaveData {
   questState?: QuestStateType;
   playerHasIronOre?: boolean;
   puzzleProgress?: Record<string, Record<string, PuzzleProgress>>;
+  sideQuestProgress?: Record<string, SideQuestProgress>;
 }
 
 const isGameSaveData = (value: unknown): value is GameSaveData => {
@@ -63,6 +64,7 @@ const isGameSaveData = (value: unknown): value is GameSaveData => {
     (data.questState === undefined || (typeof data.questState === 'number' && Number.isInteger(data.questState) &&
       data.questState >= QUEST_STATE.NOT_STARTED && data.questState <= QUEST_STATE.VICTORY_LIBERATION)) &&
     booleanFields.every(field => data[field] === undefined || typeof data[field] === 'boolean') &&
+    dialogueManager.isValidSideQuestProgress(data.sideQuestProgress) &&
     isSavedPuzzleProgress(data.puzzleProgress);
 };
 
@@ -150,7 +152,10 @@ export class GameEngine {
   private animationFrameId: number | null = null;
   private kingConfrontationTimer: number | null = null;
   private enemyDropListener: EventListener | null = null;
-  private readonly saveAfterDialogue = () => this.autoSave();
+  private readonly saveAfterDialogue = () => {
+    dialogueManager.syncQuestLog();
+    this.autoSave();
+  };
   private readonly runtimeMaps: Record<string, MapData> = {};
   private savedPuzzleProgress: Record<string, Record<string, PuzzleProgress>> = {};
   private readonly trapCooldowns: Record<string, number> = {};
@@ -357,6 +362,7 @@ export class GameEngine {
             if (progress.solved && !progress.chestClaimed) {
               progress.chestClaimed = true;
               this.player.coins += puzzle.rewardCoins;
+              dialogueManager.recordPuzzleChestClaimed(puzzle.id);
               this.spawnParticles(puzzle.chest.x * TILE_SIZE + 8, puzzle.chest.y * TILE_SIZE + 8, 8, '#facc15', 'spark');
               audioManager.playItemGet();
               this.autoSave();
@@ -481,8 +487,14 @@ export class GameEngine {
         ]))
       };
       for (const puzzle of mapData.puzzles || []) {
-        if (getPuzzleProgress(mapData, puzzle).solved) completePuzzle(mapData, puzzle);
-        else sealPuzzleBarriers(mapData, puzzle);
+        if (getPuzzleProgress(mapData, puzzle).solved) {
+          completePuzzle(mapData, puzzle);
+          if (getPuzzleProgress(mapData, puzzle).chestClaimed) {
+            dialogueManager.recordPuzzleChestClaimed(puzzle.id);
+          }
+        } else {
+          sealPuzzleBarriers(mapData, puzzle);
+        }
       }
       this.runtimeMaps[mapId] = mapData;
     }
@@ -876,6 +888,7 @@ export class GameEngine {
     });
     window.playerHasIronOre = false;
     dialogueManager.questState = QUEST_STATE.NOT_STARTED;
+    dialogueManager.resetSideQuests();
     dialogueManager.syncQuestLog();
 
     this.removeSavedGame();
@@ -913,6 +926,7 @@ export class GameEngine {
         hasRoyalDecree: this.player.hasRoyalDecree,
         swordDamage: this.player.swordDamage,
         questState: dialogueManager.questState,
+        sideQuestProgress: dialogueManager.sideQuestProgress,
         playerHasIronOre: window.playerHasIronOre,
         puzzleProgress: this.getSavedPuzzleProgress()
       };
@@ -953,6 +967,7 @@ export class GameEngine {
         coins: data.coins ?? 0
       });
       dialogueManager.questState = data.questState ?? QUEST_STATE.NOT_STARTED;
+      dialogueManager.sideQuestProgress = data.sideQuestProgress ?? {};
       dialogueManager.syncQuestLog();
       window.playerHasIronOre = data.playerHasIronOre === true;
       this.syncEquipmentFromQuestProgress();
@@ -1204,11 +1219,19 @@ export class GameEngine {
         if (!lever) continue;
         const { x, y } = cell(lever);
         const activated = progress.sequence.includes(index);
-        this.ctx.fillStyle = '#49331f';
-        this.ctx.fillRect(x + 4, y + 10, 8, 4);
-        this.ctx.fillStyle = activated ? '#4ade80' : '#c49a54';
-        this.ctx.fillRect(x + 7, y + 4, 2, 7);
-        this.ctx.fillRect(x + 5, y + 3, 5, 2);
+        const leverColor = activated ? '#4ade80' : '#f2c66d';
+        this.ctx.fillStyle = '#38291f';
+        this.ctx.fillRect(x + 2, y + 12, 12, 3);
+        this.ctx.fillStyle = '#c49a54';
+        this.ctx.fillRect(x + 3, y + 11, 10, 2);
+        this.ctx.fillStyle = '#38291f';
+        this.ctx.fillRect(x + 6, y + 3, 5, 9);
+        this.ctx.fillStyle = leverColor;
+        this.ctx.fillRect(x + 7, y + 4, 3, 7);
+        this.ctx.fillStyle = '#38291f';
+        this.ctx.fillRect(x + 3, y + 2, 8, 3);
+        this.ctx.fillStyle = leverColor;
+        this.ctx.fillRect(x + 4, y + 2, 6, 2);
       }
 
       for (let index = 0; index < (puzzle.targets || []).length; index++) {

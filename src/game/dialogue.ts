@@ -3,17 +3,74 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DialoguePage, QUEST_STATE, QuestLogItem, QuestStateType } from '../types/game';
+import { DialoguePage, QUEST_STATE, QuestLogItem, QuestStateType, SideQuestProgress } from '../types/game';
 import { audioManager } from './audio';
 import { NearbyInteractable, Player } from './entities';
 import { spriteManager } from './sprites';
 
+interface SideQuestDefinition {
+  id: string;
+  npcId: string;
+  title: string;
+  act: 'Act I' | 'Act II';
+  location: string;
+  description: string;
+  objective: string;
+  puzzleId: string;
+  unlockAt: QuestStateType;
+  hint: string;
+  reward: string;
+  rewardCoins: number;
+  rewardHearts: number;
+  rewardItem: string;
+  offer: string;
+}
+
+const SIDE_QUESTS: SideQuestDefinition[] = [
+  {
+    id: 'whispering-woods-cache',
+    npcId: 'innkeeper',
+    title: 'Echoes in the Whispering Woods',
+    act: 'Act I',
+    location: 'Le Bois des Murmures',
+    description: 'Find the hidden cache beyond the old forest levers.',
+    objective: 'Solve the middle-left-right lever sequence and claim the chest beyond the forest gate.',
+    puzzleId: 'whispering-levers',
+    unlockAt: QUEST_STATE.TALKED_AFTER_SWORD,
+    hint: 'Maëlle the Forager knows the lever order. The cache lies beyond the sealed stone passage.',
+    reward: '20 coins + fresh bread (restore 2 hearts)',
+    rewardCoins: 20,
+    rewardHearts: 2,
+    rewardItem: 'fresh bread',
+    offer: 'A traveler told me there is a hidden cache in the Whispering Woods. The old levers open a passage, but the order matters. Will you find it?'
+  },
+  {
+    id: 'route-one-lost-cache',
+    npcId: 'traveler',
+    title: 'A Peddler’s Lost Cache',
+    act: 'Act II',
+    location: 'Route 1',
+    description: 'Open the hidden cache beneath the old river crossing.',
+    objective: 'Push the carved block onto its matching floor plate and claim the chest beyond the Route 1 gate.',
+    puzzleId: 'river-stone-block',
+    unlockAt: QUEST_STATE.ORPHAN_FLOUR_RESOLVED,
+    hint: 'Look for a carved block near the old river crossing. Push it onto the matching floor plate.',
+    reward: '25 coins + a healing herb (restore 1 heart)',
+    rewardCoins: 25,
+    rewardHearts: 1,
+    rewardItem: 'healing herb',
+    offer: 'I hid a small cache near the old river crossing on Route 1, but a stone block shifted over the years. Set it on the matching floor plate and the cache is yours. Will you help?'
+  }
+];
+
 export class DialogueSystem {
   public questState: QuestStateType = QUEST_STATE.NOT_STARTED;
+  public sideQuestProgress: Record<string, SideQuestProgress> = {};
   public isOpen = false;
   public pages: DialoguePage[] = [];
   public currentPageIndex = 0;
   public currentSpeaker = '';
+  public currentSpeakerSprite: string | null = null;
   public displayedText = '';
   public fullText = '';
   public charIndex = 0;
@@ -22,6 +79,8 @@ export class DialogueSystem {
   public onCompleteCallback: (() => void) | null = null;
   public typeSpeed = 1.4;
   public onCloseCallback: (() => void) | null = null;
+  private readonly speakerSprites = new Map<string, string>();
+  private readonly claimedPuzzleIds = new Set<string>();
 
   public questLog: QuestLogItem[] = [
     {
@@ -68,6 +127,28 @@ export class DialogueSystem {
       description: 'Advance past the royal guard captains on the highway and defeat tyrant King Raymond IV in his citadel.',
       completed: false,
       reward: 'Liberation of Aethelgard & Peace'
+    },
+    {
+      id: 'whispering-woods-cache',
+      title: 'Echoes in the Whispering Woods',
+      act: 'Act I',
+      location: 'Le Bois des Murmures',
+      description: 'Find the hidden cache beyond the old forest levers.',
+      completed: false,
+      status: 'locked',
+      objective: 'Solve the middle-left-right lever sequence and claim the chest beyond the forest gate.',
+      reward: '20 coins + fresh bread (restore 2 hearts)'
+    },
+    {
+      id: 'route-one-lost-cache',
+      title: 'A Peddler’s Lost Cache',
+      act: 'Act II',
+      location: 'Route 1',
+      description: 'Open the hidden cache beneath the old river crossing.',
+      completed: false,
+      status: 'locked',
+      objective: 'Push the carved block onto its matching floor plate and claim the chest beyond the Route 1 gate.',
+      reward: '25 coins + a healing herb (restore 1 heart)'
     }
   ];
 
@@ -83,6 +164,7 @@ export class DialogueSystem {
   public loadPage(index: number) {
     const page = this.pages[index];
     this.currentSpeaker = page.speaker || '';
+    this.currentSpeakerSprite = page.speakerSprite || this.getSpeakerPortrait(this.currentSpeaker);
     this.fullText = page.text;
     this.displayedText = '';
     this.charIndex = 0;
@@ -146,8 +228,50 @@ export class DialogueSystem {
       QUEST_STATE.VICTORY_LIBERATION
     ];
     this.questLog.forEach((quest, index) => {
-      quest.completed = this.questState >= completionStates[index];
+      if (index < completionStates.length) {
+        quest.completed = this.questState >= completionStates[index];
+        return;
+      }
+      const definition = SIDE_QUESTS.find(entry => entry.id === quest.id);
+      if (!definition) return;
+      const progress = this.sideQuestProgress[quest.id];
+      const unlocked = this.questState >= definition.unlockAt;
+      quest.status = progress?.status ?? (unlocked ? 'available' : 'locked');
+      quest.completed = progress?.status === 'completed';
+      const hintText = progress?.status === 'active' ? ` Hint: ${definition.hint}` : '';
+      quest.objective = progress?.status === 'ready'
+        ? 'Return to the quest giver to claim your reward.'
+        : progress?.status === 'completed'
+          ? 'Cache found; reward claimed.'
+          : `${definition.objective}${hintText}`;
     });
+  }
+
+  public isValidSideQuestProgress(value: unknown): value is Record<string, SideQuestProgress> | undefined {
+    if (value === undefined) return true;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.entries(value).every(([id, entry]) =>
+      SIDE_QUESTS.some(quest => quest.id === id) &&
+      !!entry &&
+      typeof entry === 'object' &&
+      ['active', 'ready', 'completed'].includes((entry as SideQuestProgress).status)
+    );
+  }
+
+  public resetSideQuests() {
+    this.sideQuestProgress = {};
+    this.claimedPuzzleIds.clear();
+    this.syncQuestLog();
+  }
+
+  public recordPuzzleChestClaimed(puzzleId: string) {
+    this.claimedPuzzleIds.add(puzzleId);
+    for (const quest of SIDE_QUESTS) {
+      if (quest.puzzleId === puzzleId && this.sideQuestProgress[quest.id]?.status === 'active') {
+        this.sideQuestProgress[quest.id] = { status: 'ready' };
+      }
+    }
+    this.syncQuestLog();
   }
 
   public cancel() {
@@ -155,6 +279,7 @@ export class DialogueSystem {
     this.pages = [];
     this.currentPageIndex = 0;
     this.currentSpeaker = '';
+    this.currentSpeakerSprite = null;
     this.displayedText = '';
     this.fullText = '';
     this.charIndex = 0;
@@ -181,22 +306,29 @@ export class DialogueSystem {
   }
 
   private getSpeakerPortrait(speaker: string): string | null {
-    const s = speaker.toLowerCase();
-    if (s.includes('tobias') || s.includes('moine') || s.includes('scholar') || s.includes('citoyen')) return 'npc_oldman';
-    if (s.includes('renée') || s.includes('baker')) return 'npc_baker';
-    if (s.includes('pierre') || s.includes('blacksmith') || s.includes('maître')) return 'npc_blacksmith';
-    if (s.includes('marc') || s.includes('vigneron') || s.includes('vintner')) return 'npc_vintner';
-    if (s.includes('aldric') || s.includes('marchand') || s.includes('merchant')) return 'npc_merchant';
-    if (s.includes('garde') || s.includes('guard') || s.includes('knight')) return 'npc_guard';
-    if (s.includes('raymond') || s.includes('roi') || s.includes('king')) return 'boss_king_0';
-    if (s.includes('hero') || s.includes('young') || s.includes('player')) return 'player_down_0';
-    return null;
+    const key = speaker.trim().toLocaleLowerCase();
+    const registeredSprite = this.speakerSprites.get(key);
+    if (registeredSprite) return registeredSprite;
+
+    const knownSpeakers: Record<string, string> = {
+      'le doyen tobias': 'npc_oldman',
+      'le moine de tours': 'npc_civilian',
+      'le citoyen d’orleans': 'npc_civilian',
+      "le citoyen d'orléans": 'npc_civilian',
+      'madame renée': 'npc_baker',
+      'maître pierre': 'npc_blacksmith',
+      'marc le vigneron': 'npc_vintner',
+      'aldric le marchand': 'npc_merchant',
+      'le roi raymond iv': 'boss_king_0',
+      'young hero': 'player_down_0'
+    };
+    return knownSpeakers[key] || null;
   }
 
   public draw(ctx: CanvasRenderingContext2D, screenW: number, screenH: number) {
     if (!this.isOpen) return;
 
-    const portraitSprite = this.getSpeakerPortrait(this.currentSpeaker);
+    const portraitSprite = this.currentSpeakerSprite;
     const hasPortrait = Boolean(portraitSprite);
 
     const boxX = 6;
@@ -238,7 +370,7 @@ export class DialogueSystem {
     // Portrait Frame
     if (hasPortrait && portraitSprite) {
       const portX = boxX + 6;
-      const portY = boxY + 8;
+      const portY = boxY + Math.floor((boxH - 30) / 2);
       ctx.fillStyle = '#080a10';
       ctx.fillRect(portX - 2, portY - 2, 30, 30);
       ctx.fillStyle = '#c8a45c';
@@ -247,7 +379,15 @@ export class DialogueSystem {
       ctx.fillRect(portX, portY, 26, 26);
 
       // Draw portrait sprite centered
-      spriteManager.draw(ctx, portraitSprite, portX + 5, portY + 5);
+      const spriteWidth = spriteManager.sprites[portraitSprite]?.width || 24;
+      const spriteHeight = spriteManager.sprites[portraitSprite]?.height || 24;
+      spriteManager.drawNpc(
+        ctx,
+        portraitSprite,
+        portX + Math.floor((26 - spriteWidth) / 2),
+        portY + Math.floor((26 - spriteHeight) / 2),
+        0
+      );
     }
 
     // Dialogue text rendering
@@ -292,7 +432,10 @@ export class DialogueSystem {
 
     if (interactable.type === 'npc' && interactable.entity) {
       const npc = interactable.entity;
-      if (npc.id === 'oldman') {
+      this.speakerSprites.set(npc.name.trim().toLocaleLowerCase(), npc.sprite);
+      if (this.handleSideQuestInteraction(npc.id, npc.name, player)) {
+        return;
+      } else if (npc.id === 'oldman') {
         this.handleOldManDialogue(player);
       } else if (npc.id === 'village_guard') {
         this.handleVillageGuardDialogue();
@@ -324,6 +467,27 @@ export class DialogueSystem {
         this.startDialogue([{ speaker: 'Le Moine de Tours', text: 'Ancient scriptures foretold of a righteous youth who would raise the Wind-Cleaver to cleanse the throne of Aethelgard.' }]);
       } else if (npc.id === 'vintner') {
         this.handleVintnerDialogue(player);
+      } else if (npc.id === 'woods_forager') {
+        const forestQuest = this.sideQuestProgress['whispering-woods-cache'];
+        const text = forestQuest?.status === 'completed'
+          ? 'You found the cache! The stones mark a safe path through the woods; follow the dirt trail back to Oakhaven.'
+          : 'Those old levers open the hidden passage. Pull the middle lever first, then the left one, then the right. If you pull the wrong one, start the sequence again!';
+        this.startDialogue([{ speaker: npc.name, text }]);
+      } else if (npc.id === 'village_gardener') {
+        this.startDialogue([{
+          speaker: npc.name,
+          text: 'A little care keeps these flowers bright, even when the village has hard days. I tend this patch so everyone can enjoy it.'
+        }]);
+      } else if (npc.id === 'dijon_vintner_outdoors') {
+        this.startDialogue([{
+          speaker: npc.name,
+          text: 'The vines are thriving this season. I keep an eye on them here before carrying the harvest down to the cellar.'
+        }]);
+      } else if (npc.id === 'castle_guard_captain' || npc.id === 'castle_guard') {
+        this.startDialogue([{
+          speaker: npc.name,
+          text: 'This chamber is part of the royal guard post. Keep your weapon ready; the throne room lies through the western door.'
+        }]);
       } else if (npc.id === 'cottage_resident') {
         this.startDialogue([{ speaker: npc.name, text: "I mend cloaks for the villagers. The roads are safer when neighbors look after one another." }]);
       } else if (npc.id === 'cottage_child') {
@@ -341,9 +505,60 @@ export class DialogueSystem {
       } else if (npc.id === 'town_child') {
         this.startDialogue([{ speaker: npc.name, text: "I want to be a knight who protects people, not one who frightens them." }]);
       } else {
-        this.startDialogue([{ speaker: npc.name, text: 'The Crown demands ever higher taxes. May God watch over our roads!' }]);
+        this.startDialogue([{ speaker: npc.name, text: 'There is always plenty to do around here. It is good to see a traveler passing through—take care on the roads!' }]);
       }
     }
+  }
+
+  private handleSideQuestInteraction(npcId: string, speaker: string, player: Player): boolean {
+    const quest = SIDE_QUESTS.find(entry => entry.npcId === npcId);
+    if (!quest) return false;
+
+    const progress = this.sideQuestProgress[quest.id];
+    if (!progress && this.questState < quest.unlockAt) return false;
+
+    if (!progress) {
+      this.startDialogue([
+        { speaker, text: quest.offer },
+        { speaker, text: 'If you are willing, speak with me again after opening the cache. I will share what I know about the road.' }
+      ], () => {
+        this.sideQuestProgress[quest.id] = {
+          status: this.claimedPuzzleIds.has(quest.puzzleId) ? 'ready' : 'active'
+        };
+        this.syncQuestLog();
+      });
+      return true;
+    }
+
+    if (progress.status === 'active') {
+      this.startDialogue([{
+        speaker,
+        text: `${quest.objective} ${quest.hint}`
+      }]);
+      return true;
+    }
+
+    if (progress.status === 'ready') {
+      this.startDialogue([
+        { speaker, text: 'You found it! A promise is a promise—take these coins and something useful for the road.' },
+        { speaker: 'SYSTEM', text: `Received ${quest.rewardCoins} coins and ${quest.rewardItem}.` }
+      ], () => {
+        player.coins += quest.rewardCoins;
+        player.heal(quest.rewardHearts);
+        this.sideQuestProgress[quest.id] = { status: 'completed' };
+        this.syncQuestLog();
+        audioManager.playQuestDone();
+      });
+      return true;
+    }
+
+    this.startDialogue([{
+      speaker,
+      text: quest.id === 'whispering-woods-cache'
+        ? 'Thank you for finding the forest cache. Maëlle can still guide you through the lever passage, and the river crossing on Route 1 hides another old secret.'
+        : 'You have done the road a kindness. The old stone plate opened the cache; keep an eye out for marked stones and hidden paths on your travels.'
+    }]);
+    return true;
   }
 
   public handleVillageGuardDialogue() {

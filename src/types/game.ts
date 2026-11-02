@@ -152,4 +152,10 @@ export interface QuestLogItem {
   description: string;
   completed: boolean;
   reward?: string;
+  status?: 'locked' | 'available' | 'active' | 'ready' | 'completed';
+  objective?: string;
+}
+
+export interface SideQuestProgress {
+  status: 'active' | 'ready' | 'completed';
 }

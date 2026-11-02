@@ -224,6 +224,12 @@ export class SpriteManager {
   public generateAllSprites() {
     this.generatePlayerSprites();
     this.generatePlayerShieldSprites();
+    for (const direction of ['down', 'up', 'left', 'right']) {
+      for (let walkingFrame = 0; walkingFrame < 3; walkingFrame++) {
+        this.sprites[`player_equipped_${direction}_${walkingFrame}`] =
+          this.sprites[`player_gear_${direction}_${walkingFrame}`];
+      }
+    }
     this.generateArchitectureTiles();
     this.generateHouseInteriorTiles();
     this.generateForestAndNatureTiles();
@@ -436,7 +442,6 @@ export class SpriteManager {
         for (let walkingFrame = 0; walkingFrame < frames.length; walkingFrame++) {
           const frame = frames[walkingFrame];
           this.sprites[`player_${direction}_${walkingFrame}`] = frame;
-          this.sprites[`player_equipped_${direction}_${walkingFrame}`] = frame;
           this.sprites[`player_sword_${direction}_${walkingFrame}`] =
             this.createPlayerEquipmentSprite(frame, true, false);
           this.sprites[`player_shield_gear_${direction}_${walkingFrame}`] =
@@ -456,7 +461,7 @@ export class SpriteManager {
     equippedImage.onerror = () => console.error('Unable to load public/assets/equipped-hero-reference.png');
     equippedImage.onload = () => {
       const animationColumns = [592, 735, 878];
-      const rowOffsets = { down: 70, up: 170, right: 377 };
+      const rowOffsets = { down: 70, up: 170, left: 275, right: 377 };
       const crop = (x: number, y: number) =>
         this.createNPCReferenceFrame(equippedImage, x, y, 128, 100);
       const mirror = (source: HTMLCanvasElement) => {
@@ -468,12 +473,13 @@ export class SpriteManager {
       };
       const downFrames = animationColumns.map(x => crop(x, rowOffsets.down));
       const upFrames = animationColumns.map(x => crop(x, rowOffsets.up));
-      const rightFrames = animationColumns.map(x => crop(x, rowOffsets.right));
+      const leftFrames = animationColumns.map(x => crop(x, rowOffsets.right));
+      const rightFrames = leftFrames.map(mirror);
       const directionFrames = {
         down: downFrames,
         up: upFrames,
+        left: leftFrames,
         right: rightFrames,
-        left: rightFrames.map(mirror)
       };
 
       Object.entries(directionFrames).forEach(([direction, frames]) =>
@@ -904,6 +910,13 @@ export class SpriteManager {
     store('player_gear_right_0', mirror(overlayMatrix(left_idle, gear_left)));
     store('player_gear_right_1', mirror(overlayMatrix(left_walk1, gear_left)));
     store('player_gear_right_2', mirror(overlayMatrix(left_walk2, gear_left)));
+
+    for (const direction of ['down', 'up', 'left', 'right']) {
+      for (let walkingFrame = 0; walkingFrame < 3; walkingFrame++) {
+        this.sprites[`player_equipped_${direction}_${walkingFrame}`] =
+          this.sprites[`player_gear_${direction}_${walkingFrame}`];
+      }
+    }
 
     const down_attack = [
       ...PLAYER_FRONT_HEAD.slice(0, 5),

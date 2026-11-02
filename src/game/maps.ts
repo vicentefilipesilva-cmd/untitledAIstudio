@@ -671,7 +671,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
       }
     ],
     doors: [
-      { x: 5 * 16, y: 2 * 16, targetMap: 'dijon_wine_cellar', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
+      { x: 16 * 16, y: 3 * 16, targetMap: 'dijon_wine_cellar', targetX: 5 * 16, targetY: 7 * 16, targetFacing: 0 }
     ],
     npcs: [],
     enemies: [
@@ -785,10 +785,10 @@ export const WORLD_MAPS: Record<string, MapData> = {
     { id: 'town_resident', name: 'Margot the Seamstress', sprite: 'npc_civilian', x: 4 * 16, y: 4 * 16, facing: 3 },
     { id: 'town_child', name: 'Young Perrin', sprite: 'npc_merchant', x: 7 * 16, y: 4 * 16, facing: 2 }
   ]),
-  village_barracks: createVenueInterior('village_barracks', "Oakhaven Watch Barracks", 'village', 29, 7, 'barracks', [
+  village_barracks: createVenueInterior('village_barracks', "Oakhaven Watch Barracks", 'village', 15, 4, 'barracks', [
     { id: 'village_guard', name: "Le Garde d'Oakhaven", sprite: 'npc_guard', x: 5 * 16, y: 4 * 16, facing: 3 }
   ]),
-  aiguemorte_barracks: createVenueInterior('aiguemorte_barracks', 'Aiguemorte Garrison', 'aiguemorte', 29, 7, 'barracks', [
+  aiguemorte_barracks: createVenueInterior('aiguemorte_barracks', 'Aiguemorte Garrison', 'aiguemorte', 30, 8, 'barracks', [
     { id: 'town_guard', name: 'Le Garde de la Garnison', sprite: 'npc_guard', x: 5 * 16, y: 4 * 16, facing: 3 }
   ]),
   val_de_loire_forge: createVenueInterior('val_de_loire_forge', "Maître Pierre's Forge", 'val_de_loire', 9, 6, 'forge', [
@@ -803,7 +803,7 @@ export const WORLD_MAPS: Record<string, MapData> = {
   tours_chapel: createVenueInterior('tours_chapel', 'Tours Cathedral Chapter House', 'tours', 5, 2, 'chapel', [
     { id: 'tours_scholar', name: 'Le Moine de Tours', sprite: 'npc_civilian', x: 4 * 16, y: 5 * 16, facing: 3 }
   ]),
-  dijon_wine_cellar: createVenueInterior('dijon_wine_cellar', 'Dijon Wine Cellar', 'dijon', 5, 2, 'wine-cellar', [
+  dijon_wine_cellar: createVenueInterior('dijon_wine_cellar', 'Dijon Wine Cellar', 'dijon', 16, 3, 'wine-cellar', [
     { id: 'vintner', name: 'Marc le Vigneron', sprite: 'npc_vintner', x: 5 * 16, y: 4 * 16, facing: 3 }
   ]),
   castle_guardroom: createVenueInterior('castle_guardroom', 'Le Château Noir Guard Chamber', 'capital', 2, 4, 'castle-guardroom', [
@@ -823,7 +823,6 @@ const SETTLEMENT_EXPANSIONS = [
     landmark: 'X',
     citizens: [
       ['Bastien the Shepherd', 'npc_vintner', 'oakhaven_woodcutter'],
-      ['Margot the Gardener', 'npc_baker', 'oakhaven_herbalist'],
       ['Perrin the Cooper', 'npc_merchant', 'oakhaven_miller']
     ],
     homes: [
@@ -897,7 +896,6 @@ const SETTLEMENT_EXPANSIONS = [
     border: 'M',
     landmark: 'G',
     citizens: [
-      ['Marguerite the Vintner', 'npc_vintner', 'dijon_wine_cellar'],
       ['Colin the Cooper', 'npc_merchant', 'dijon_cooper'],
       ['Berthe the Preserver', 'npc_baker', 'dijon_cellar']
     ],
@@ -908,6 +906,25 @@ const SETTLEMENT_EXPANSIONS = [
     ]
   }
 ] as const;
+
+const OUTDOOR_RESIDENTS: Record<string, NPCData[]> = {
+  village: [{
+    id: 'village_gardener',
+    name: 'Margot the Gardener',
+    sprite: 'npc_baker',
+    x: 7 * TILE_SIZE,
+    y: 18 * TILE_SIZE,
+    facing: 0
+  }],
+  dijon: [{
+    id: 'dijon_vintner_outdoors',
+    name: 'Marguerite the Vintner',
+    sprite: 'npc_vintner',
+    x: 22 * TILE_SIZE,
+    y: 17 * TILE_SIZE,
+    facing: 2
+  }]
+};
 
 const EXPANDED_MAP_IDS = new Set(['village', 'forest', ...SETTLEMENT_EXPANSIONS.map(settlement => settlement.mapId)]);
 export const isExpandedWorldMap = (mapId: string) => EXPANDED_MAP_IDS.has(mapId);
@@ -1022,8 +1039,8 @@ const puzzlePoint = (x: number, y: number) => ({ x, y });
 WORLD_MAPS.forest.puzzles = [{
   id: 'whispering-levers',
   type: 'lever-sequence',
-  hint: 'The forest inscription reads: middle, left, right.',
-  levers: [puzzlePoint(20, 18), puzzlePoint(18, 18), puzzlePoint(22, 18)],
+  hint: 'Maëlle says: pull the middle lever, then the left, then the right.',
+  levers: [puzzlePoint(17, 18), puzzlePoint(10, 18), puzzlePoint(24, 18)],
   sequence: [0, 1, 2],
   barriers: [puzzlePoint(25, 16), puzzlePoint(25, 17), puzzlePoint(25, 18)],
   gates: [puzzlePoint(25, 17)],
@@ -1096,6 +1113,16 @@ for (const map of Object.values(WORLD_MAPS)) {
   }
 }
 
+for (const [mapId, x, y] of [
+  ['village_barracks', 15 * TILE_SIZE, 4 * TILE_SIZE - 4],
+  ['aiguemorte_barracks', 30 * TILE_SIZE, 8 * TILE_SIZE - 4]
+] as const) {
+  const returnDoor = WORLD_MAPS[mapId].doors?.[0];
+  if (!returnDoor) throw new Error(`Missing return door for ${mapId}.`);
+  returnDoor.targetX = x;
+  returnDoor.targetY = y;
+}
+
 const addDistrictBuilding = (map: MapData, startX: number, roofY: number) => {
   const rows = [
     ['R', 'R', 'R', 'R'],
@@ -1116,11 +1143,16 @@ for (const [mapId, targetMap] of [
   ['aiguemorte', 'aiguemorte_barracks']
 ] as const) {
   const map = WORLD_MAPS[mapId];
-  addDistrictBuilding(map, 27, 5);
+  const isOakhaven = mapId === 'village';
+  const buildingX = isOakhaven ? 11 : 27;
+  const buildingY = isOakhaven ? 2 : 5;
+  const doorX = buildingX + 3;
+  const doorY = buildingY + 1;
+  addDistrictBuilding(map, buildingX, buildingY);
   map.doors = map.doors || [];
   map.doors.push({
-    x: 30 * 16,
-    y: 6 * 16,
+    x: doorX * TILE_SIZE,
+    y: doorY * TILE_SIZE,
     targetMap,
     targetX: 5 * 16,
     targetY: 7 * 16,
@@ -1188,6 +1220,16 @@ for (const settlement of SETTLEMENT_EXPANSIONS) {
     }
   }
 }
+
+for (const [mapId, residents] of Object.entries(OUTDOOR_RESIDENTS)) {
+  const map = WORLD_MAPS[mapId];
+  if (!map) throw new Error(`Missing settlement map for outdoor residents: ${mapId}.`);
+  map.npcs.push(...residents);
+}
+
+const dijonCellarEntrance = WORLD_MAPS.dijon.layout[9].split('');
+dijonCellarEntrance[22] = 'E';
+WORLD_MAPS.dijon.layout[9] = dijonCellarEntrance.join('');
 
 const forest = WORLD_MAPS.forest;
 for (const [x, y] of [[15, 20], [16, 20], [21, 21], [22, 21], [7, 22], [8, 22], [26, 17], [27, 17]]) {

@@ -77,18 +77,20 @@ export const QuestJournal: React.FC<QuestJournalProps> = ({ isOpen, onClose, eng
               className={`p-3 rounded-lg border text-xs ${
                 quest.completed
                   ? 'bg-emerald-950/20 border-emerald-800/40'
+                  : quest.status === 'ready'
+                    ? 'bg-amber-950/30 border-amber-700/70'
                   : 'bg-slate-800/60 border-slate-700/80'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-bold text-slate-100 flex items-center gap-1.5">
-                  <span>{quest.completed ? '✅' : '⏳'}</span>
+                  <span>{quest.completed ? '✅' : quest.status === 'ready' ? '🎁' : '⏳'}</span>
                   {quest.title}
                 </span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                   quest.completed ? 'bg-emerald-900 text-emerald-300' : 'bg-amber-950 text-amber-300 border border-amber-800'
                 }`}>
-                  {quest.completed ? 'COMPLETED' : quest.act}
+                  {quest.completed ? 'COMPLETED' : quest.status?.toUpperCase() || quest.act}
                 </span>
               </div>
               
@@ -98,6 +100,14 @@ export const QuestJournal: React.FC<QuestJournalProps> = ({ isOpen, onClose, eng
               <p className="text-slate-300 leading-relaxed mb-2 text-[11px]">
                 {quest.description}
               </p>
+
+              {quest.objective && (
+                <p className={`leading-relaxed mb-2 text-[11px] ${
+                  quest.status === 'ready' ? 'text-amber-300' : 'text-slate-400'
+                }`}>
+                  Objective: {quest.objective}
+                </p>
+              )}
 
               {quest.reward && (
                 <div className="text-[10px] text-amber-400/90 font-mono bg-black/40 rounded px-2 py-1">
