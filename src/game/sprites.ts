@@ -478,8 +478,8 @@ export class SpriteManager {
       const directionFrames = {
         down: downFrames,
         up: upFrames,
-        left: leftFrames,
-        right: rightFrames,
+        left: rightFrames,
+        right: leftFrames,
       };
 
       Object.entries(directionFrames).forEach(([direction, frames]) =>
